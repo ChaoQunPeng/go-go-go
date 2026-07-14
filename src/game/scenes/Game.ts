@@ -5,6 +5,8 @@ import { GameObjects, Scene } from 'phaser';
 export class Game extends Scene {
     // 保存当前还存在于画面中的平台；每个平台都是一个 Phaser 矩形对象。
     private platforms: GameObjects.Rectangle[] = [];
+    // 石头数组
+    private rocks: GameObjects.Rectangle[] = [];
     // 记录下一块平台应该从哪个 x 坐标开始生成；x 越大，位置越靠右。
     private nextPlatformX = 0;
 
@@ -15,7 +17,7 @@ export class Game extends Scene {
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
     // 平台每秒向左移动多少像素；数值越大，游戏节奏越快。
-    private readonly platformSpeed = 0;
+    private readonly platformSpeed = 200;
     // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
     private readonly playerSpeed = 300;
     // 玩家跳跃时，每秒向上移动多少像素；数值越大，游戏越快。
@@ -26,7 +28,7 @@ export class Game extends Scene {
     private readonly playerSpawnX = 100;
     private readonly playerSpawnY = 300;
 
-
+    private isDashingDown = false;
 
     private player!: GameObjects.Ellipse;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -54,6 +56,7 @@ export class Game extends Scene {
 
         // 场景开始时先生成一批底部平台。
         this.seedPlatforms();
+        this.addRock(600);
 
         this.physics.add.existing(this.player);
 
@@ -64,6 +67,14 @@ export class Game extends Scene {
 
         const firstPlatform = this.platforms[0];
         this.physics.add.collider(this.player, firstPlatform);
+
+        this.physics.add.overlap(
+            this.player,
+            this.rocks,
+            this.hitRock,
+            undefined,
+            this
+        );
     }
 
     // update 会在游戏运行时不断执行，一般每秒执行很多次。
@@ -72,6 +83,60 @@ export class Game extends Scene {
         this.scrollPlatforms(delta / 1000);
 
         this.updatePlayer(delta / 1000);
+    }
+
+    private hitRock(
+        player: GameObjects.GameObject,
+        rock: GameObjects.GameObject
+    ) {
+
+        const rockObject =
+            rock as GameObjects.Rectangle;
+
+
+        if (this.isDashingDown) {
+
+            console.log("撞碎石头");
+
+
+            rockObject.destroy();
+
+
+            const index =
+                this.rocks.indexOf(rockObject);
+
+
+            if (index !== -1) {
+                this.rocks.splice(index, 1);
+            }
+
+
+        } else {
+
+            console.log("撞到石头，死亡");
+
+            this.respawnPlayer();
+
+        }
+
+    }
+
+    private removeOffscreenRocks() {
+
+        while (this.rocks.length > 0) {
+
+            const rock = this.rocks[0];
+
+
+            if (rock.x > -100) {
+                break;
+            }
+
+
+            rock.destroy();
+
+            this.rocks.shift();
+        }
     }
 
     private updatePlayer(deltaSeconds: number) {
@@ -93,7 +158,12 @@ export class Game extends Scene {
             this.cursors.down.isDown &&
             !isGrounded
         ) {
+            this.isDashingDown = true;
             body.setVelocityY(this.dashDownSpeed);
+        } else {
+
+            this.isDashingDown = false;
+
         }
 
         if (this.cursors.left.isDown) {
@@ -116,6 +186,33 @@ export class Game extends Scene {
             this.playerSpawnX,
             this.playerSpawnY
         );
+    }
+
+    /**
+     * 添加石头
+     */
+    private addRock(x: number) {
+
+        const rock = this.add.rectangle(
+            x,
+            this.platformY - 40,
+            40,
+            40,
+            0x555555
+        );
+
+
+        rock.setOrigin(0, 1);
+
+
+        this.physics.add.existing(
+            rock,
+            true
+        );
+
+
+        this.rocks.push(rock);
+
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -173,14 +270,32 @@ export class Game extends Scene {
 
         // 遍历当前所有平台，让它们一起向左移动。
         for (const platform of this.platforms) {
-            // x 减小表示物体向左移动。
             platform.x -= moveDistance;
+
+            const body =
+                platform.body as Phaser.Physics.Arcade.StaticBody;
+            // 更新刚体位置
+            body.updateFromGameObject();
+        }
+
+        // 石头移动
+        for (const rock of this.rocks) {
+
+            rock.x -= moveDistance;
+
+
+            const body =
+                rock.body as Phaser.Physics.Arcade.StaticBody;
+
+            body.updateFromGameObject();
         }
 
         // 清理已经滚出屏幕左侧的平台，避免对象越来越多。
         this.removeOffscreenPlatforms();
         // 在屏幕右侧继续补平台，保证前方一直有新平台出现。
         this.extendPlatformTrack();
+        // 清理已经滚出屏幕左侧的石头
+        this.removeOffscreenRocks();
     }
 
     // 删除已经完全离开屏幕左侧的平台。
