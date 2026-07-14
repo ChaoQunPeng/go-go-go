@@ -18,6 +18,14 @@ export class Game extends Scene {
     private readonly platformSpeed = 0;
     // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
     private readonly playerSpeed = 300;
+    // 玩家跳跃时，每秒向上移动多少像素；数值越大，游戏越快。
+    private readonly jumpSpeed = 500;
+    // 
+    private readonly dashDownSpeed = 800;
+
+    private readonly playerSpawnX = 100;
+    private readonly playerSpawnY = 300;
+
 
 
     private player!: GameObjects.Ellipse;
@@ -36,16 +44,16 @@ export class Game extends Scene {
 
     // create 是 Phaser 的场景创建阶段，适合放初始化画面内容的代码。
     create() {
-        // 场景开始时先生成一批底部平台。
-        this.seedPlatforms();
-
         this.player = this.add.ellipse(
-            0,
-            300,
+            this.playerSpawnX,
+            this.playerSpawnY,
             40,
             40,
             0xff0000
         );
+
+        // 场景开始时先生成一批底部平台。
+        this.seedPlatforms();
 
         this.physics.add.existing(this.player);
 
@@ -68,8 +76,25 @@ export class Game extends Scene {
 
     private updatePlayer(deltaSeconds: number) {
         const body = this.player.body as Phaser.Physics.Arcade.Body;
+        const isGrounded = body.blocked.down;
+
+        if (this.player.y > 600) {
+            this.respawnPlayer();
+            return;
+        }
 
         body.setVelocityX(0);
+
+        if (this.cursors.up.isDown && isGrounded) {
+            body.setVelocityY(-this.jumpSpeed);
+        }
+
+        if (
+            this.cursors.down.isDown &&
+            !isGrounded
+        ) {
+            body.setVelocityY(this.dashDownSpeed);
+        }
 
         if (this.cursors.left.isDown) {
             body.setVelocityX(-this.playerSpeed);
@@ -78,6 +103,19 @@ export class Game extends Scene {
         if (this.cursors.right.isDown) {
             body.setVelocityX(this.playerSpeed);
         }
+    }
+
+    private respawnPlayer() {
+        const body = this.player.body as Phaser.Physics.Arcade.Body;
+
+        // 停止所有速度
+        body.setVelocity(0, 0);
+
+        // 回到出生点
+        this.player.setPosition(
+            this.playerSpawnX,
+            this.playerSpawnY
+        );
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -120,6 +158,7 @@ export class Game extends Scene {
         // 给平台加一条边框，让平台更容易看清楚。
         platform.setStrokeStyle(3, 0x0f766e);
         this.physics.add.existing(platform, true);
+        this.physics.add.collider(this.player, platform);
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);
