@@ -1,5 +1,9 @@
 // 从 Phaser 里导入需要用到的类型和基类。
-import { GameObjects, Scene } from 'phaser';
+import {
+    GameObjects,
+    Scene,
+    Input
+} from 'phaser';
 
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
@@ -18,10 +22,15 @@ export class Game extends Scene {
     private readonly platformSpeed = 0;
     // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
     private readonly playerSpeed = 300;
+    // 玩家跳跃时每秒向上移动多少像素；数值越大，游戏节奏越快。
+    private readonly jumpSpeed = 500;
+    // 玩家向下冲刺
+    private readonly dashSpeed = 800;
 
 
     private player!: GameObjects.Ellipse;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -68,8 +77,26 @@ export class Game extends Scene {
 
     private updatePlayer(deltaSeconds: number) {
         const body = this.player.body as Phaser.Physics.Arcade.Body;
+        const isGrounded = body.blocked.down;
 
+        // body.setCollideWorldBounds(true);
         body.setVelocityX(0);
+
+        if (
+            Input.Keyboard.JustDown(this.cursors.up) &&
+            isGrounded
+        ) {
+            body.setVelocityY(-this.jumpSpeed);
+        }
+
+        if (
+            Input.Keyboard.JustDown(this.cursors.down) &&
+            !isGrounded
+        ) {
+            body.setVelocityY(
+                Math.max(body.velocity.y, this.dashSpeed)
+            );
+        }
 
         if (this.cursors.left.isDown) {
             body.setVelocityX(-this.playerSpeed);
