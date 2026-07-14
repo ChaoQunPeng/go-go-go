@@ -15,7 +15,13 @@ export class Game extends Scene {
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
     // 平台每秒向左移动多少像素；数值越大，游戏节奏越快。
-    private readonly platformSpeed = 300;
+    private readonly platformSpeed = 0;
+    // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
+    private readonly playerSpeed = 300;
+
+
+    private player!: GameObjects.Ellipse;
+    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -32,12 +38,46 @@ export class Game extends Scene {
     create() {
         // 场景开始时先生成一批底部平台。
         this.seedPlatforms();
+
+        this.player = this.add.ellipse(
+            0,
+            300,
+            40,
+            40,
+            0xff0000
+        );
+
+        this.physics.add.existing(this.player);
+
+        if (!this.input.keyboard) {
+            return;
+        }
+        this.cursors = this.input.keyboard.createCursorKeys();
+
+        const firstPlatform = this.platforms[0];
+        this.physics.add.collider(this.player, firstPlatform);
     }
 
     // update 会在游戏运行时不断执行，一般每秒执行很多次。
     update(_: number, delta: number) {
         // Phaser 传进来的 delta 单位是毫秒，这里除以 1000 转成秒。
         this.scrollPlatforms(delta / 1000);
+
+        this.updatePlayer(delta / 1000);
+    }
+
+    private updatePlayer(deltaSeconds: number) {
+        const body = this.player.body as Phaser.Physics.Arcade.Body;
+
+        body.setVelocityX(0);
+
+        if (this.cursors.left.isDown) {
+            body.setVelocityX(-this.playerSpeed);
+        }
+
+        if (this.cursors.right.isDown) {
+            body.setVelocityX(this.playerSpeed);
+        }
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -79,6 +119,7 @@ export class Game extends Scene {
         platform.setOrigin(0, 0.5);
         // 给平台加一条边框，让平台更容易看清楚。
         platform.setStrokeStyle(3, 0x0f766e);
+        this.physics.add.existing(platform, true);
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);

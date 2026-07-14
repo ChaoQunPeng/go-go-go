@@ -15,7 +15,17 @@ const config: Types.Core.GameConfig = {
     },
     scene: [
         MainGame
-    ]
+    ],
+    physics: {
+        default: 'arcade',
+        arcade: {
+            gravity: {
+                x: 0,
+                y: 1000
+            },
+            debug: true
+        }
+    },
 };
 
 const StartGame = (parent: string) => {
