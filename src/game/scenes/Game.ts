@@ -13,7 +13,7 @@ export class Game extends Scene {
     // 游戏画布的逻辑宽度；这里要和 src/game/main.ts 里的 width 保持一致。
     private readonly worldWidth = 1024;
     // 平台的 y 坐标；y 越大，位置越靠下，所以 660 接近画面底部。
-    private readonly platformY = 360;
+    private readonly platformY = 660;
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
     // 平台每秒向左移动多少像素；数值越大，游戏节奏越快。
@@ -24,13 +24,34 @@ export class Game extends Scene {
     private readonly jumpSpeed = 500;
     // 玩家向下冲刺时每秒向下移动多少像素。
     private readonly dashDownSpeed = 800;
-    // 玩家按空格水平冲刺时每秒向右移动多少像素。
-    private readonly dashSpeed = 900;
+    // 冲刺距离
+    private readonly dashDistance = 100;
     // 水平冲刺持续时间，单位是毫秒。
-    private readonly dashDuration = 150;
+    private readonly dashDuration = 100;
+    // 玩家按空格水平冲刺时每秒向右移动多少像素。
+    private get dashSpeed() {
+        return this.dashDistance / (this.dashDuration / 1000);
+    }
 
+    // -1 表示左, 1 表示右。
+    private facingDirection = 1;
+
+    // 当前准备执行第几段跳跃：1 表示第一段跳，2 表示第二段跳。
+    // 每次成功跳跃后递增，只有玩家落地时才会重置为 1。
+    private jumpCount = 1;
+    // 最大允许执行的跳跃段数，2 表示支持二段跳。
+    private readonly maxJumpCount = 2;
+
+    // 当前跳跃段数没有超过上限时，才允许继续跳跃。
+    private get canJump() {
+        return this.jumpCount <= this.maxJumpCount;
+    }
+
+
+    // 重生位置
     private readonly playerSpawnX = 100;
     private readonly playerSpawnY = 300;
+
 
     private isDashingDown = false;
     private dashEndTime = 0;
@@ -145,23 +166,25 @@ export class Game extends Scene {
         const body = this.player.body as Phaser.Physics.Arcade.Body;
         const isGrounded = body.blocked.down;
 
-        if (this.player.y > 600) {
-            this.respawnPlayer();
-            return;
-        }
-
-        if (Input.Keyboard.JustDown(this.cursors.space)) {
-            this.dashEndTime = this.time.now + this.dashDuration;
-        }
-
-        const isDashing = this.time.now < this.dashEndTime;
+        // if (this.player.y > 600) {
+        //     this.respawnPlayer();
+        //     return;
+        // }
 
         // body.setCollideWorldBounds(true);
         body.setVelocityX(0);
 
-        // 上
-        if (this.cursors.up.isDown && isGrounded) {
+        // 落地后恢复两次跳跃机会；空中不能重置，否则会形成无限跳。
+        if (isGrounded) {
+            this.jumpCount = 1;
+        }
+
+        // 上：第一段跳 / 第二段跳。
+        // JustDown 只在按键刚按下时触发一次，避免长按按键连续消耗跳跃次数。
+        if (Input.Keyboard.JustDown(this.cursors.up) &&
+            this.canJump) {
             body.setVelocityY(-this.jumpSpeed);
+            this.jumpCount++;
         }
 
         // 下
@@ -179,17 +202,25 @@ export class Game extends Scene {
 
         // 左
         if (this.cursors.left.isDown) {
+            this.facingDirection = -1;
             body.setVelocityX(-this.playerSpeed);
         }
 
         // 右
         if (this.cursors.right.isDown) {
+            this.facingDirection = 1;
             body.setVelocityX(this.playerSpeed);
         }
 
+        if (Input.Keyboard.JustDown(this.cursors.space)) {
+            this.dashEndTime = this.time.now + this.dashDuration;
+        }
+
+        const isDashing = this.time.now < this.dashEndTime;
+
         // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
         if (isDashing) {
-            body.setVelocityX(this.dashSpeed);
+            body.setVelocityX(this.dashSpeed * this.facingDirection);
         }
     }
 
