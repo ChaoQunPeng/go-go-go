@@ -1,14 +1,12 @@
 // 从 Phaser 里导入需要用到的类型和基类。
-import {
-    GameObjects,
-    Scene,
-    Input
-} from 'phaser';
+import { GameObjects, Input, Scene } from 'phaser';
 
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
     // 保存当前还存在于画面中的平台；每个平台都是一个 Phaser 矩形对象。
     private platforms: GameObjects.Rectangle[] = [];
+    // 石头数组
+    private rocks: GameObjects.Rectangle[] = [];
     // 记录下一块平台应该从哪个 x 坐标开始生成；x 越大，位置越靠右。
     private nextPlatformX = 0;
 
@@ -22,11 +20,20 @@ export class Game extends Scene {
     private readonly platformSpeed = 0;
     // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
     private readonly playerSpeed = 300;
-    // 玩家跳跃时每秒向上移动多少像素；数值越大，游戏节奏越快。
+    // 玩家跳跃时，每秒向上移动多少像素；数值越大，游戏越快。
     private readonly jumpSpeed = 500;
-    // 玩家向下冲刺
-    private readonly dashSpeed = 800;
+    // 玩家向下冲刺时每秒向下移动多少像素。
+    private readonly dashDownSpeed = 800;
+    // 玩家按空格水平冲刺时每秒向右移动多少像素。
+    private readonly dashSpeed = 900;
+    // 水平冲刺持续时间，单位是毫秒。
+    private readonly dashDuration = 150;
 
+    private readonly playerSpawnX = 100;
+    private readonly playerSpawnY = 300;
+
+    private isDashingDown = false;
+    private dashEndTime = 0;
 
     private player!: GameObjects.Ellipse;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -45,16 +52,17 @@ export class Game extends Scene {
 
     // create 是 Phaser 的场景创建阶段，适合放初始化画面内容的代码。
     create() {
-        // 场景开始时先生成一批底部平台。
-        this.seedPlatforms();
-
         this.player = this.add.ellipse(
-            0,
-            300,
+            this.playerSpawnX,
+            this.playerSpawnY,
             40,
             40,
             0xff0000
         );
+
+        // 场景开始时先生成一批底部平台。
+        this.seedPlatforms();
+        this.addRock(600);
 
         this.physics.add.existing(this.player);
 
@@ -65,6 +73,14 @@ export class Game extends Scene {
 
         const firstPlatform = this.platforms[0];
         this.physics.add.collider(this.player, firstPlatform);
+
+        this.physics.add.overlap(
+            this.player,
+            this.rocks,
+            this.hitRock,
+            undefined,
+            this
+        );
     }
 
     // update 会在游戏运行时不断执行，一般每秒执行很多次。
@@ -72,39 +88,149 @@ export class Game extends Scene {
         // Phaser 传进来的 delta 单位是毫秒，这里除以 1000 转成秒。
         this.scrollPlatforms(delta / 1000);
 
-        this.updatePlayer(delta / 1000);
+        this.updatePlayer();
     }
 
-    private updatePlayer(deltaSeconds: number) {
+    private hitRock(
+        _player: unknown,
+        rock: unknown
+    ) {
+
+        return
+        // Phaser 回调参数类型很宽，这里只把石头当成矩形处理。
+        const rockObject =
+            rock as GameObjects.Rectangle;
+
+
+        if (this.isDashingDown) {
+            console.log("撞碎石头");
+            rockObject.destroy();
+            const index =
+                this.rocks.indexOf(rockObject);
+
+            if (index !== -1) {
+                this.rocks.splice(index, 1);
+            }
+
+
+        } else {
+
+            console.log("撞到石头，死亡");
+
+            this.respawnPlayer();
+
+        }
+
+    }
+
+    private removeOffscreenRocks() {
+
+        while (this.rocks.length > 0) {
+
+            const rock = this.rocks[0];
+
+
+            if (rock.x > -100) {
+                break;
+            }
+
+
+            rock.destroy();
+
+            this.rocks.shift();
+        }
+    }
+
+    private updatePlayer() {
         const body = this.player.body as Phaser.Physics.Arcade.Body;
         const isGrounded = body.blocked.down;
+
+        if (this.player.y > 600) {
+            this.respawnPlayer();
+            return;
+        }
+
+        if (Input.Keyboard.JustDown(this.cursors.space)) {
+            this.dashEndTime = this.time.now + this.dashDuration;
+        }
+
+        const isDashing = this.time.now < this.dashEndTime;
 
         // body.setCollideWorldBounds(true);
         body.setVelocityX(0);
 
-        if (
-            Input.Keyboard.JustDown(this.cursors.up) &&
-            isGrounded
-        ) {
+        // 上
+        if (this.cursors.up.isDown && isGrounded) {
             body.setVelocityY(-this.jumpSpeed);
         }
 
+        // 下
         if (
-            Input.Keyboard.JustDown(this.cursors.down) &&
+            this.cursors.down.isDown &&
             !isGrounded
         ) {
-            body.setVelocityY(
-                Math.max(body.velocity.y, this.dashSpeed)
-            );
+            this.isDashingDown = true;
+            body.setVelocityY(this.dashDownSpeed);
+        } else {
+
+            this.isDashingDown = false;
+
         }
 
+        // 左
         if (this.cursors.left.isDown) {
             body.setVelocityX(-this.playerSpeed);
         }
 
+        // 右
         if (this.cursors.right.isDown) {
             body.setVelocityX(this.playerSpeed);
         }
+
+        // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
+        if (isDashing) {
+            body.setVelocityX(this.dashSpeed);
+        }
+    }
+
+    private respawnPlayer() {
+        const body = this.player.body as Phaser.Physics.Arcade.Body;
+
+        // 停止所有速度
+        body.setVelocity(0, 0);
+
+        // 回到出生点
+        this.player.setPosition(
+            this.playerSpawnX,
+            this.playerSpawnY
+        );
+    }
+
+    /**
+     * 添加石头
+     */
+    private addRock(x: number) {
+
+        const rock = this.add.rectangle(
+            x,
+            this.platformY - 40,
+            40,
+            40,
+            0x555555
+        );
+
+
+        rock.setOrigin(0, 1);
+
+
+        this.physics.add.existing(
+            rock,
+            true
+        );
+
+
+        this.rocks.push(rock);
+
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -124,7 +250,8 @@ export class Game extends Scene {
         // 随机生成平台宽度，让每个平台长短不完全一样。
         const width = this.randomBetween(150, 300);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
+        // const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
+        const gap = 0;
         // 新平台的起点等于“下一块平台位置”加上空隙。
         const x = this.nextPlatformX + gap;
 
@@ -147,6 +274,7 @@ export class Game extends Scene {
         // 给平台加一条边框，让平台更容易看清楚。
         platform.setStrokeStyle(3, 0x0f766e);
         this.physics.add.existing(platform, true);
+        this.physics.add.collider(this.player, platform);
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);
@@ -161,14 +289,32 @@ export class Game extends Scene {
 
         // 遍历当前所有平台，让它们一起向左移动。
         for (const platform of this.platforms) {
-            // x 减小表示物体向左移动。
             platform.x -= moveDistance;
+
+            const body =
+                platform.body as Phaser.Physics.Arcade.StaticBody;
+            // 更新刚体位置
+            body.updateFromGameObject();
+        }
+
+        // 石头移动
+        for (const rock of this.rocks) {
+
+            rock.x -= moveDistance;
+
+
+            const body =
+                rock.body as Phaser.Physics.Arcade.StaticBody;
+
+            body.updateFromGameObject();
         }
 
         // 清理已经滚出屏幕左侧的平台，避免对象越来越多。
         this.removeOffscreenPlatforms();
         // 在屏幕右侧继续补平台，保证前方一直有新平台出现。
         this.extendPlatformTrack();
+        // 清理已经滚出屏幕左侧的石头
+        this.removeOffscreenRocks();
     }
 
     // 删除已经完全离开屏幕左侧的平台。
