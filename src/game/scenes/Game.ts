@@ -1,5 +1,5 @@
 // 从 Phaser 里导入需要用到的类型和基类。
-import { GameObjects, Input, Scene } from 'phaser';
+import { GameObjects, Input, Scene, Math as PhaserMath } from 'phaser';
 
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
@@ -13,11 +13,18 @@ export class Game extends Scene {
     // 游戏画布的逻辑宽度；这里要和 src/game/main.ts 里的 width 保持一致。
     private readonly worldWidth = 1024;
     // 平台的 y 坐标；y 越大，位置越靠下，所以 660 接近画面底部。
-    private readonly platformY = 360;
+    // private readonly platformY = 360;
+    /**
+ * 当前生成平台的高度。
+ *
+ * 后续每生成一个平台，
+ * 都会根据上一块平台进行上下浮动。
+ */
+    private currentPlatformY = 360;
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
     // 平台每秒向左移动多少像素；数值越大，游戏节奏越快。
-    private readonly platformSpeed = 0;
+    private readonly platformSpeed = 100;
     // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
     private readonly playerSpeed = 300;
     // 玩家跳跃时，每秒向上移动多少像素；数值越大，游戏越快。
@@ -88,7 +95,7 @@ export class Game extends Scene {
 
         // 场景开始时先生成一批底部平台。
         this.seedPlatforms();
-        this.addRock(600);
+        // this.addRock(600);
 
         this.physics.add.existing(this.player);
 
@@ -171,7 +178,7 @@ export class Game extends Scene {
         const body = this.player.body as Phaser.Physics.Arcade.Body;
         const isGrounded = body.blocked.down;
 
-        if (this.player.y > 600) {
+        if (this.player.y > 700) {
             this.respawnPlayer();
             return;
         }
@@ -271,11 +278,11 @@ export class Game extends Scene {
     /**
      * 添加石头
      */
-    private addRock(x: number) {
+    private addRock(x: number, platformY: number) {
 
         const rock = this.add.rectangle(
             x,
-            this.platformY - 40,
+            platformY - 40,
             40,
             40,
             0x555555
@@ -312,17 +319,38 @@ export class Game extends Scene {
         // 随机生成平台宽度，让每个平台长短不完全一样。
         const width = this.randomBetween(150, 300);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        // const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
-        const gap = 0;
+        const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
         // 新平台的起点等于“下一块平台位置”加上空隙。
         const x = this.nextPlatformX + gap;
+
+        /**
+ * 除了第一块平台以外，
+ * 后续平台都会在上一块平台的基础上，
+ * 上下浮动一定距离。
+ */
+        if (this.nextPlatformX !== 0) {
+
+            // 高度变化范围。
+            const offset = this.randomBetween(-40, 40);
+
+            // 更新当前平台高度。
+            this.currentPlatformY += offset;
+
+            // 限制平台不会太高或太低。
+            this.currentPlatformY = PhaserMath.Clamp(
+                this.currentPlatformY,
+                280,
+                420
+            );
+
+        }
 
         // 创建一个矩形作为平台；这里没有使用任何图片素材。
         const platform = this.add.rectangle(
             // 矩形的 x 坐标；因为下面设置了左侧为原点，所以这是平台左边缘。
             x,
             // 矩形的 y 坐标；所有平台都放在同一条水平线上。
-            this.platformY,
+            this.currentPlatformY,
             // 矩形宽度；前面随机生成。
             width,
             // 矩形高度；使用固定值。
@@ -340,6 +368,19 @@ export class Game extends Scene {
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);
+
+        /**
+ * 30% 概率在平台上生成石头。
+ */
+        if (Math.random() < 0.8) {
+
+            this.addRock(
+                x + width / 2,
+                this.currentPlatformY
+            );
+
+        }
+
         // 更新下一块平台的起点：当前平台左边缘加当前平台宽度。
         this.nextPlatformX = x + width;
     }
