@@ -24,10 +24,15 @@ export class Game extends Scene {
     private readonly jumpSpeed = 500;
     // 玩家向下冲刺时每秒向下移动多少像素。
     private readonly dashDownSpeed = 800;
-    // 玩家按空格水平冲刺时每秒向右移动多少像素。
-    private readonly dashSpeed = 900;
+
+    private readonly dashDistance = 100;
+
     // 水平冲刺持续时间，单位是毫秒。
     private readonly dashDuration = 150;
+    // 玩家按空格水平冲刺时每秒向右移动多少像素。
+    private get dashSpeed() {
+        return this.dashDistance / (this.dashDuration / 1000);
+    }
 
     private readonly playerSpawnX = 100;
     private readonly playerSpawnY = 300;
@@ -35,8 +40,29 @@ export class Game extends Scene {
     private isDashingDown = false;
     private dashEndTime = 0;
 
+    // 当前还剩多少次可跳。
+    private remainingJumpCount = 2;
+
+    // 最大跳跃次数。
+    private readonly maxJumpCount = 2
+
+    private facingDirection = 1;
+
+    /**
+ * 是否已经真正离开过地面。
+ *
+ * 用来避免：
+ * 起跳后的1~2帧 blocked.down 仍然为 true，
+ * 导致跳跃次数被错误恢复。
+ */
+    private hasLeftGround = false;
+
     private player!: GameObjects.Ellipse;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+    private get canJump() {
+        return this.remainingJumpCount > 0;
+    }
 
 
     // 构造函数会在创建这个场景时执行一次。
@@ -160,8 +186,34 @@ export class Game extends Scene {
         body.setVelocityX(0);
 
         // 上
-        if (this.cursors.up.isDown && isGrounded) {
+        // if (this.cursors.up.isDown && isGrounded) {
+        //     body.setVelocityY(-this.jumpSpeed);
+        // }
+
+        // 玩家真正进入空中
+        if (!isGrounded) {
+            this.hasLeftGround = true;
+        }
+
+        // 真正落地恢复跳跃次数
+        if (
+            isGrounded &&
+            this.hasLeftGround
+        ) {
+            this.remainingJumpCount =
+                this.maxJumpCount;
+
+            this.hasLeftGround = false;
+        }
+
+        // 二段跳
+        if (
+            Input.Keyboard.JustDown(this.cursors.up) &&
+            this.canJump
+        ) {
             body.setVelocityY(-this.jumpSpeed);
+
+            this.remainingJumpCount--;
         }
 
         // 下
@@ -179,17 +231,22 @@ export class Game extends Scene {
 
         // 左
         if (this.cursors.left.isDown) {
+            this.facingDirection = -1;
             body.setVelocityX(-this.playerSpeed);
         }
 
         // 右
         if (this.cursors.right.isDown) {
+            this.facingDirection = 1;
             body.setVelocityX(this.playerSpeed);
         }
 
         // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
         if (isDashing) {
-            body.setVelocityX(this.dashSpeed);
+            body.setVelocityX(
+                this.dashSpeed *
+                this.facingDirection
+            );
         }
     }
 
@@ -198,6 +255,11 @@ export class Game extends Scene {
 
         // 停止所有速度
         body.setVelocity(0, 0);
+
+        this.remainingJumpCount =
+            this.maxJumpCount;
+
+        this.hasLeftGround = false;
 
         // 回到出生点
         this.player.setPosition(
