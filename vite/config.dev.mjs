@@ -14,12 +14,12 @@ export default defineConfig({
         rollupOptions: {
             output: {
                 manualChunks: {
-                    phaser: ['phaser']
-                }
-            }
+                    phaser: ['phaser'],
+                },
+            },
         },
     },
     server: {
-        port: 8422
-    }
+        port: 8422,
+    },
 });

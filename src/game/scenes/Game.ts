@@ -15,11 +15,11 @@ export class Game extends Scene {
     // 平台的 y 坐标；y 越大，位置越靠下，所以 660 接近画面底部。
     // private readonly platformY = 360;
     /**
- * 当前生成平台的高度。
- *
- * 后续每生成一个平台，
- * 都会根据上一块平台进行上下浮动。
- */
+     * 当前生成平台的高度。
+     *
+     * 后续每生成一个平台，
+     * 都会根据上一块平台进行上下浮动。
+     */
     private currentPlatformY = 360;
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
@@ -51,17 +51,17 @@ export class Game extends Scene {
     private remainingJumpCount = 2;
 
     // 最大跳跃次数。
-    private readonly maxJumpCount = 2
+    private readonly maxJumpCount = 2;
 
     private facingDirection = 1;
 
     /**
- * 是否已经真正离开过地面。
- *
- * 用来避免：
- * 起跳后的1~2帧 blocked.down 仍然为 true，
- * 导致跳跃次数被错误恢复。
- */
+     * 是否已经真正离开过地面。
+     *
+     * 用来避免：
+     * 起跳后的1~2帧 blocked.down 仍然为 true，
+     * 导致跳跃次数被错误恢复。
+     */
     private hasLeftGround = false;
 
     private player!: GameObjects.Ellipse;
@@ -70,7 +70,6 @@ export class Game extends Scene {
     private get canJump() {
         return this.remainingJumpCount > 0;
     }
-
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -90,7 +89,7 @@ export class Game extends Scene {
             this.playerSpawnY,
             40,
             40,
-            0xff0000
+            0xff0000,
         );
 
         // 场景开始时先生成一批底部平台。
@@ -112,7 +111,7 @@ export class Game extends Scene {
             this.rocks,
             this.hitRock,
             undefined,
-            this
+            this,
         );
     }
 
@@ -124,49 +123,33 @@ export class Game extends Scene {
         this.updatePlayer();
     }
 
-    private hitRock(
-        _player: unknown,
-        rock: unknown
-    ) {
-
-        return
+    private hitRock(_player: unknown, rock: unknown) {
+        return;
         // Phaser 回调参数类型很宽，这里只把石头当成矩形处理。
-        const rockObject =
-            rock as GameObjects.Rectangle;
-
+        const rockObject = rock as GameObjects.Rectangle;
 
         if (this.isDashingDown) {
-            console.log("撞碎石头");
+            console.log('撞碎石头');
             rockObject.destroy();
-            const index =
-                this.rocks.indexOf(rockObject);
+            const index = this.rocks.indexOf(rockObject);
 
             if (index !== -1) {
                 this.rocks.splice(index, 1);
             }
-
-
         } else {
-
-            console.log("撞到石头，死亡");
+            console.log('撞到石头，死亡');
 
             this.respawnPlayer();
-
         }
-
     }
 
     private removeOffscreenRocks() {
-
         while (this.rocks.length > 0) {
-
             const rock = this.rocks[0];
-
 
             if (rock.x > -100) {
                 break;
             }
-
 
             rock.destroy();
 
@@ -203,37 +186,25 @@ export class Game extends Scene {
         }
 
         // 真正落地恢复跳跃次数
-        if (
-            isGrounded &&
-            this.hasLeftGround
-        ) {
-            this.remainingJumpCount =
-                this.maxJumpCount;
+        if (isGrounded && this.hasLeftGround) {
+            this.remainingJumpCount = this.maxJumpCount;
 
             this.hasLeftGround = false;
         }
 
         // 二段跳
-        if (
-            Input.Keyboard.JustDown(this.cursors.up) &&
-            this.canJump
-        ) {
+        if (Input.Keyboard.JustDown(this.cursors.up) && this.canJump) {
             body.setVelocityY(-this.jumpSpeed);
 
             this.remainingJumpCount--;
         }
 
         // 下
-        if (
-            this.cursors.down.isDown &&
-            !isGrounded
-        ) {
+        if (this.cursors.down.isDown && !isGrounded) {
             this.isDashingDown = true;
             body.setVelocityY(this.dashDownSpeed);
         } else {
-
             this.isDashingDown = false;
-
         }
 
         // 左
@@ -250,10 +221,7 @@ export class Game extends Scene {
 
         // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
         if (isDashing) {
-            body.setVelocityX(
-                this.dashSpeed *
-                this.facingDirection
-            );
+            body.setVelocityX(this.dashSpeed * this.facingDirection);
         }
     }
 
@@ -263,43 +231,25 @@ export class Game extends Scene {
         // 停止所有速度
         body.setVelocity(0, 0);
 
-        this.remainingJumpCount =
-            this.maxJumpCount;
+        this.remainingJumpCount = this.maxJumpCount;
 
         this.hasLeftGround = false;
 
         // 回到出生点
-        this.player.setPosition(
-            this.playerSpawnX,
-            this.playerSpawnY
-        );
+        this.player.setPosition(this.playerSpawnX, this.playerSpawnY);
     }
 
     /**
      * 添加石头
      */
     private addRock(x: number, platformY: number) {
-
-        const rock = this.add.rectangle(
-            x,
-            platformY - 40,
-            40,
-            40,
-            0x555555
-        );
-
+        const rock = this.add.rectangle(x, platformY - 40, 40, 40, 0x555555);
 
         rock.setOrigin(0, 1);
 
-
-        this.physics.add.existing(
-            rock,
-            true
-        );
-
+        this.physics.add.existing(rock, true);
 
         this.rocks.push(rock);
-
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -324,12 +274,11 @@ export class Game extends Scene {
         const x = this.nextPlatformX + gap;
 
         /**
- * 除了第一块平台以外，
- * 后续平台都会在上一块平台的基础上，
- * 上下浮动一定距离。
- */
+         * 除了第一块平台以外，
+         * 后续平台都会在上一块平台的基础上，
+         * 上下浮动一定距离。
+         */
         if (this.nextPlatformX !== 0) {
-
             // 高度变化范围。
             const offset = this.randomBetween(-40, 40);
 
@@ -340,9 +289,8 @@ export class Game extends Scene {
             this.currentPlatformY = PhaserMath.Clamp(
                 this.currentPlatformY,
                 280,
-                420
+                420,
             );
-
         }
 
         // 创建一个矩形作为平台；这里没有使用任何图片素材。
@@ -356,7 +304,7 @@ export class Game extends Scene {
             // 矩形高度；使用固定值。
             this.platformHeight,
             // 矩形填充颜色；0x36d399 是绿色。
-            0x36d399
+            0x36d399,
         );
 
         // 把平台原点设置为左侧中点，方便用 x 表示平台左边缘。
@@ -370,15 +318,10 @@ export class Game extends Scene {
         this.platforms.push(platform);
 
         /**
- * 30% 概率在平台上生成石头。
- */
+         * 30% 概率在平台上生成石头。
+         */
         if (Math.random() < 0.8) {
-
-            this.addRock(
-                x + width / 2,
-                this.currentPlatformY
-            );
-
+            this.addRock(x + width / 2, this.currentPlatformY);
         }
 
         // 更新下一块平台的起点：当前平台左边缘加当前平台宽度。
@@ -394,20 +337,16 @@ export class Game extends Scene {
         for (const platform of this.platforms) {
             platform.x -= moveDistance;
 
-            const body =
-                platform.body as Phaser.Physics.Arcade.StaticBody;
+            const body = platform.body as Phaser.Physics.Arcade.StaticBody;
             // 更新刚体位置
             body.updateFromGameObject();
         }
 
         // 石头移动
         for (const rock of this.rocks) {
-
             rock.x -= moveDistance;
 
-
-            const body =
-                rock.body as Phaser.Physics.Arcade.StaticBody;
+            const body = rock.body as Phaser.Physics.Arcade.StaticBody;
 
             body.updateFromGameObject();
         }
