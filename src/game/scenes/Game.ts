@@ -27,7 +27,7 @@ export class Game extends Scene {
     // 冲刺距离
     private readonly dashDistance = 100;
     // 水平冲刺持续时间，单位是毫秒。
-    private readonly dashDuration = 100;
+    private readonly dashDuration = 50;
     // 玩家按空格水平冲刺时每秒向右移动多少像素。
     private get dashSpeed() {
         return this.dashDistance / (this.dashDuration / 1000);
@@ -36,15 +36,63 @@ export class Game extends Scene {
     // -1 表示左, 1 表示右。
     private facingDirection = 1;
 
-    // 当前准备执行第几段跳跃：1 表示第一段跳，2 表示第二段跳。
-    // 每次成功跳跃后递增，只有玩家落地时才会重置为 1。
-    private jumpCount = 1;
-    // 最大允许执行的跳跃段数，2 表示支持二段跳。
+    /**
+    * 剩余跳跃次数。
+    *
+    * 例如：
+    *
+    * maxJumpCount = 2
+    *
+    * 初始：
+    * remainingJumpCount = 2
+    *
+    * 第一次跳：
+    * remainingJumpCount = 1
+    *
+    * 第二次跳：
+    * remainingJumpCount = 0
+    *
+    */
+    private remainingJumpCount = 2;
+    /**
+    * 最大跳跃次数。
+    *
+    * 2代表：
+    * 地面跳一次
+    * 空中追加跳一次
+    *
+    * 总共二段跳。
+    */
     private readonly maxJumpCount = 2;
+    /**
+    * 是否已经离开过地面。
+    *
+    * 作用：
+    * Phaser 的 body.blocked.down 可能在起跳后的极短时间内仍然为 true。
+    *
+    * 如果直接：
+    *
+    * if(isGrounded){
+    *     jumpCount = max;
+    * }
+    *
+    * 会导致：
+    *
+    * 第一次跳
+    * ↓
+    * blocked.down 还为 true
+    * ↓
+    * 恢复跳跃次数
+    * ↓
+    * 变成三段跳
+    *
+    * 所以必须确认玩家真的进入过空中。
+    */
+    private hasLeftGround = false;
 
-    // 当前跳跃段数没有超过上限时，才允许继续跳跃。
+    // 还有剩余跳跃次数时，才允许继续跳跃。
     private get canJump() {
-        return this.jumpCount <= this.maxJumpCount;
+        return this.remainingJumpCount > 0;
     }
 
 
@@ -163,65 +211,252 @@ export class Game extends Scene {
     }
 
     private updatePlayer() {
-        const body = this.player.body as Phaser.Physics.Arcade.Body;
+
+        const body =
+            this.player.body as Phaser.Physics.Arcade.Body;
+
+
+        /**
+         * Phaser碰撞状态。
+         *
+         * true:
+         * 玩家脚下面检测到了碰撞物。
+         *
+         * 注意：
+         * blocked.down 不是绝对可靠的“站在地面”状态。
+         *
+         * 起跳后的极短时间内：
+         * blocked.down 可能仍然保持 true。
+         *
+         * 所以不能直接：
+         *
+         * if(isGrounded){
+         *     remainingJumpCount = maxJumpCount;
+         * }
+         *
+         * 否则会导致第一次跳跃被恢复，产生三段跳。
+         */
         const isGrounded = body.blocked.down;
 
-        // if (this.player.y > 600) {
-        //     this.respawnPlayer();
-        //     return;
-        // }
 
-        // body.setCollideWorldBounds(true);
+
+        /**
+         * 默认清除水平速度。
+         *
+         * 后面根据：
+         *
+         * 左右移动
+         * 冲刺
+         *
+         * 重新设置速度。
+         */
         body.setVelocityX(0);
 
-        // 落地后恢复两次跳跃机会；空中不能重置，否则会形成无限跳。
-        if (isGrounded) {
-            this.jumpCount = 1;
+
+
+        /**
+         * ==========================
+         *       二段跳核心逻辑
+         * ==========================
+         */
+
+
+        /**
+         * 玩家已经进入空中。
+         *
+         * 只要检测到一次：
+         *
+         * isGrounded === false
+         *
+         * 就说明玩家已经离开地面。
+         *
+         * 后面再次落地时，
+         * 才允许恢复跳跃次数。
+         */
+        if (!isGrounded) {
+
+            this.hasLeftGround = true;
+
         }
 
-        // 上：第一段跳 / 第二段跳。
-        // JustDown 只在按键刚按下时触发一次，避免长按按键连续消耗跳跃次数。
-        if (Input.Keyboard.JustDown(this.cursors.up) &&
-            this.canJump) {
+
+
+        /**
+         * 真正落地恢复跳跃次数。
+         *
+         * 必须满足：
+         *
+         * 1. 当前在地面
+         *
+         * 2. 玩家之前离开过地面
+         *
+         * 防止：
+         *
+         * 起跳
+         * ↓
+         * blocked.down短暂仍为true
+         * ↓
+         * 错误恢复跳跃次数
+         *
+         */
+        if (
+            isGrounded &&
+            this.hasLeftGround
+        ) {
+
+            this.remainingJumpCount =
+                this.maxJumpCount;
+
+
+            /**
+             * 重置跳跃周期。
+             */
+            this.hasLeftGround = false;
+
+        }
+
+
+
+        /**
+         * ==========================
+         *          跳跃
+         * ==========================
+         */
+
+
+        /**
+         * JustDown:
+         *
+         * 只在按键按下瞬间触发一次。
+         *
+         * 防止长按↑导致每帧跳跃。
+         */
+        if (
+            Input.Keyboard.JustDown(this.cursors.up)
+            &&
+            this.canJump
+        ) {
+
+            /**
+             * Y轴向下为正。
+             *
+             * 所以负数代表向上跳。
+             */
             body.setVelocityY(-this.jumpSpeed);
-            this.jumpCount++;
+
+
+            /**
+             * 消耗一次跳跃次数。
+             */
+            this.remainingJumpCount--;
+
         }
 
-        // 下
+
+
+        /**
+         * ==========================
+         *          下砸
+         * ==========================
+         */
+
+
         if (
             this.cursors.down.isDown &&
             !isGrounded
         ) {
+
             this.isDashingDown = true;
-            body.setVelocityY(this.dashDownSpeed);
+
+            body.setVelocityY(
+                this.dashDownSpeed
+            );
+
         } else {
 
             this.isDashingDown = false;
 
         }
 
-        // 左
+
+
+        /**
+         * ==========================
+         *       左右移动
+         * ==========================
+         */
+
+
         if (this.cursors.left.isDown) {
+
             this.facingDirection = -1;
-            body.setVelocityX(-this.playerSpeed);
+
+            body.setVelocityX(
+                -this.playerSpeed
+            );
+
         }
 
-        // 右
+
         if (this.cursors.right.isDown) {
+
             this.facingDirection = 1;
-            body.setVelocityX(this.playerSpeed);
+
+            body.setVelocityX(
+                this.playerSpeed
+            );
+
         }
 
-        if (Input.Keyboard.JustDown(this.cursors.space)) {
-            this.dashEndTime = this.time.now + this.dashDuration;
+
+
+        /**
+         * ==========================
+         *          冲刺
+         * ==========================
+         */
+
+
+        /**
+         * 按下空格开始冲刺计时。
+         */
+        if (
+            Input.Keyboard.JustDown(this.cursors.space)
+        ) {
+
+            this.dashEndTime =
+                this.time.now + this.dashDuration;
+
         }
 
-        const isDashing = this.time.now < this.dashEndTime;
 
-        // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
+
+        /**
+         * 当前是否处于冲刺状态。
+         */
+        const isDashing =
+            this.time.now < this.dashEndTime;
+
+
+
+        /**
+         * 冲刺期间持续保持速度。
+         *
+         * 因为前面：
+         *
+         * body.setVelocityX(0)
+         *
+         * 会清空水平速度。
+         */
         if (isDashing) {
-            body.setVelocityX(this.dashSpeed * this.facingDirection);
+
+            body.setVelocityX(
+                this.dashSpeed *
+                this.facingDirection
+            );
+
         }
+
     }
 
     private respawnPlayer() {
@@ -235,6 +470,10 @@ export class Game extends Scene {
             this.playerSpawnX,
             this.playerSpawnY
         );
+
+        // 重生相当于开启新的行动周期，恢复二段跳次数并等待下一次真实落地判定。
+        this.remainingJumpCount = this.maxJumpCount;
+        this.wasGrounded = false;
     }
 
     /**
