@@ -1,6 +1,14 @@
 // 从 Phaser 里导入需要用到的类型和基类。
 import { GameObjects, Input, Scene, Math as PhaserMath } from 'phaser';
 
+/**
+ * 创建平台时可配置的业务选项。
+ */
+interface AddPlatformOptions {
+    /** 当前平台是否允许生成石头，普通平台默认允许。 */
+    allowRock?: boolean;
+}
+
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
     // 保存当前还存在于画面中的平台；每个平台都是一个 Phaser 矩形对象。
@@ -39,6 +47,15 @@ export class Game extends Scene {
     // 玩家按空格水平冲刺时每秒向右移动多少像素。
     private get dashSpeed() {
         return this.dashDistance / (this.dashDuration / 1000);
+    }
+
+    /**
+     * 玩家当前是否处于水平冲刺期间。
+     *
+     * 根据冲刺结束时间实时计算，供移动和后续撞击逻辑统一判断。
+     */
+    private get isDashing() {
+        return this.time.now < this.dashEndTime;
     }
 
     private readonly playerSpawnX = 100;
@@ -94,7 +111,6 @@ export class Game extends Scene {
 
         // 场景开始时先生成一批底部平台。
         this.seedPlatforms();
-        // this.addRock(600);
 
         this.physics.add.existing(this.player);
 
@@ -124,11 +140,10 @@ export class Game extends Scene {
     }
 
     private hitRock(_player: unknown, rock: unknown) {
-        return;
         // Phaser 回调参数类型很宽，这里只把石头当成矩形处理。
         const rockObject = rock as GameObjects.Rectangle;
 
-        if (this.isDashingDown) {
+        if (this.isDashingDown || this.isDashing) {
             console.log('撞碎石头');
             rockObject.destroy();
             const index = this.rocks.indexOf(rockObject);
@@ -169,8 +184,6 @@ export class Game extends Scene {
         if (Input.Keyboard.JustDown(this.cursors.space)) {
             this.dashEndTime = this.time.now + this.dashDuration;
         }
-
-        const isDashing = this.time.now < this.dashEndTime;
 
         // body.setCollideWorldBounds(true);
         body.setVelocityX(0);
@@ -220,7 +233,7 @@ export class Game extends Scene {
         }
 
         // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
-        if (isDashing) {
+        if (this.isDashing) {
             body.setVelocityX(this.dashSpeed * this.facingDirection);
         }
     }
@@ -257,6 +270,9 @@ export class Game extends Scene {
         // 从屏幕最左侧开始安排第一块平台。
         this.nextPlatformX = 0;
 
+        // 出生平台禁止生成石头，避免玩家开局直接碰撞障碍。
+        this.addPlatform({ allowRock: false });
+
         // 持续生成平台，直到平台总长度超过屏幕右侧一段距离。
         while (this.nextPlatformX < this.worldWidth + 400) {
             // 每循环一次，就创建一块新的平台。
@@ -264,8 +280,13 @@ export class Game extends Scene {
         }
     }
 
-    // 创建一块新的平台，并把它放到上一块平台的右边。
-    private addPlatform() {
+    /**
+     * 创建一块新平台，并根据业务选项决定是否生成石头。
+     */
+    private addPlatform(options: AddPlatformOptions = {}) {
+        // 普通平台默认允许生成石头，调用方只需声明特殊平台的差异。
+        const { allowRock = true } = options;
+
         // 随机生成平台宽度，让每个平台长短不完全一样。
         const width = this.randomBetween(150, 300);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
@@ -318,9 +339,9 @@ export class Game extends Scene {
         this.platforms.push(platform);
 
         /**
-         * 30% 概率在平台上生成石头。
+         * 允许生成障碍时，按 80% 概率在平台上生成石头。
          */
-        if (Math.random() < 0.8) {
+        if (allowRock && Math.random() < 0.8) {
             this.addRock(x + width / 2, this.currentPlatformY);
         }
 
@@ -335,7 +356,7 @@ export class Game extends Scene {
 
         // 遍历当前所有平台，让它们一起向左移动。
         for (const platform of this.platforms) {
-            platform.x -= moveDistance;
+            platform.x -= this.isDashing ? moveDistance * 2 : moveDistance;
 
             const body = platform.body as Phaser.Physics.Arcade.StaticBody;
             // 更新刚体位置
