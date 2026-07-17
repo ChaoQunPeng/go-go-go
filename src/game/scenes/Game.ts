@@ -40,7 +40,7 @@ export class Game extends Scene {
     // 玩家向下冲刺时每秒向下移动多少像素。
     private readonly dashDownSpeed = 800;
 
-    private readonly dashDistance = 100;
+    private readonly dashDistance = 200;
 
     // 水平冲刺持续时间，单位是毫秒。
     private readonly dashDuration = 150;
@@ -134,7 +134,7 @@ export class Game extends Scene {
     // update 会在游戏运行时不断执行，一般每秒执行很多次。
     update(_: number, delta: number) {
         // Phaser 传进来的 delta 单位是毫秒，这里除以 1000 转成秒。
-        this.scrollPlatforms(delta / 1000);
+        this.scrollWorld(delta / 1000);
 
         this.updatePlayer();
     }
@@ -349,28 +349,19 @@ export class Game extends Scene {
         this.nextPlatformX = x + width;
     }
 
-    // 根据经过的时间移动所有平台。
-    private scrollPlatforms(deltaSeconds: number) {
-        // 计算这一帧平台应该移动多少像素：速度乘以时间。
-        const moveDistance = this.platformSpeed * deltaSeconds;
+    /**
+     * 根据经过时间滚动整个游戏世界。
+     *
+     * 平台、石头等地图内容共用同一帧的滚动距离，避免冲刺时彼此错位。
+     */
+    private scrollWorld(deltaSeconds: number) {
+        // 水平冲刺期间提高世界滚动速度，增强玩家向前冲刺的速度感。
+        const speedMultiplier = this.isDashing ? 3 : 1;
+        const scrollDistance =
+            this.platformSpeed * deltaSeconds * speedMultiplier;
 
-        // 遍历当前所有平台，让它们一起向左移动。
-        for (const platform of this.platforms) {
-            platform.x -= this.isDashing ? moveDistance * 2 : moveDistance;
-
-            const body = platform.body as Phaser.Physics.Arcade.StaticBody;
-            // 更新刚体位置
-            body.updateFromGameObject();
-        }
-
-        // 石头移动
-        for (const rock of this.rocks) {
-            rock.x -= moveDistance;
-
-            const body = rock.body as Phaser.Physics.Arcade.StaticBody;
-
-            body.updateFromGameObject();
-        }
+        this.moveWorldObjects(this.platforms, scrollDistance);
+        this.moveWorldObjects(this.rocks, scrollDistance);
 
         // 清理已经滚出屏幕左侧的平台，避免对象越来越多。
         this.removeOffscreenPlatforms();
@@ -378,6 +369,22 @@ export class Game extends Scene {
         this.extendPlatformTrack();
         // 清理已经滚出屏幕左侧的石头
         this.removeOffscreenRocks();
+    }
+
+    /**
+     * 向左移动一组静态地图对象，并同步 Arcade Physics 刚体位置。
+     */
+    private moveWorldObjects(
+        objects: GameObjects.Rectangle[],
+        distance: number,
+    ) {
+        for (const object of objects) {
+            object.x -= distance;
+
+            const body = object.body as Phaser.Physics.Arcade.StaticBody;
+
+            body.updateFromGameObject();
+        }
     }
 
     // 删除已经完全离开屏幕左侧的平台。
