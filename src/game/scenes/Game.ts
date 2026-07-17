@@ -1,5 +1,5 @@
 // 从 Phaser 里导入需要用到的类型和基类。
-import { GameObjects, Input, Scene } from 'phaser';
+import { GameObjects, Input, Scene, Math as PhaserMath } from 'phaser';
 
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
@@ -13,100 +13,63 @@ export class Game extends Scene {
     // 游戏画布的逻辑宽度；这里要和 src/game/main.ts 里的 width 保持一致。
     private readonly worldWidth = 1024;
     // 平台的 y 坐标；y 越大，位置越靠下，所以 660 接近画面底部。
-    private readonly platformY = 660;
+    // private readonly platformY = 360;
+    /**
+     * 当前生成平台的高度。
+     *
+     * 后续每生成一个平台，
+     * 都会根据上一块平台进行上下浮动。
+     */
+    private currentPlatformY = 360;
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
     // 平台每秒向左移动多少像素；数值越大，游戏节奏越快。
-    private readonly platformSpeed = 0;
+    private readonly platformSpeed = 100;
     // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
     private readonly playerSpeed = 300;
     // 玩家跳跃时，每秒向上移动多少像素；数值越大，游戏越快。
     private readonly jumpSpeed = 500;
     // 玩家向下冲刺时每秒向下移动多少像素。
     private readonly dashDownSpeed = 800;
-    // 冲刺距离
+
     private readonly dashDistance = 100;
+
     // 水平冲刺持续时间，单位是毫秒。
-    private readonly dashDuration = 50;
+    private readonly dashDuration = 150;
     // 玩家按空格水平冲刺时每秒向右移动多少像素。
     private get dashSpeed() {
         return this.dashDistance / (this.dashDuration / 1000);
     }
 
-    // -1 表示左, 1 表示右。
-    private facingDirection = 1;
-
-    /**
-    * 剩余跳跃次数。
-    *
-    * 例如：
-    *
-    * maxJumpCount = 2
-    *
-    * 初始：
-    * remainingJumpCount = 2
-    *
-    * 第一次跳：
-    * remainingJumpCount = 1
-    *
-    * 第二次跳：
-    * remainingJumpCount = 0
-    *
-    */
-    private remainingJumpCount = 2;
-    /**
-    * 最大跳跃次数。
-    *
-    * 2代表：
-    * 地面跳一次
-    * 空中追加跳一次
-    *
-    * 总共二段跳。
-    */
-    private readonly maxJumpCount = 2;
-    /**
-    * 是否已经离开过地面。
-    *
-    * 作用：
-    * Phaser 的 body.blocked.down 可能在起跳后的极短时间内仍然为 true。
-    *
-    * 如果直接：
-    *
-    * if(isGrounded){
-    *     jumpCount = max;
-    * }
-    *
-    * 会导致：
-    *
-    * 第一次跳
-    * ↓
-    * blocked.down 还为 true
-    * ↓
-    * 恢复跳跃次数
-    * ↓
-    * 变成三段跳
-    *
-    * 所以必须确认玩家真的进入过空中。
-    */
-    private hasLeftGround = false;
-
-    // 还有剩余跳跃次数时，才允许继续跳跃。
-    private get canJump() {
-        return this.remainingJumpCount > 0;
-    }
-
-
-    // 重生位置
     private readonly playerSpawnX = 100;
     private readonly playerSpawnY = 300;
-
 
     private isDashingDown = false;
     private dashEndTime = 0;
 
+    // 当前还剩多少次可跳。
+    private remainingJumpCount = 2;
+
+    // 最大跳跃次数。
+    private readonly maxJumpCount = 2;
+
+    private facingDirection = 1;
+
+    /**
+     * 是否已经真正离开过地面。
+     *
+     * 用来避免：
+     * 起跳后的1~2帧 blocked.down 仍然为 true，
+     * 导致跳跃次数被错误恢复。
+     */
+    private hasLeftGround = false;
+
     private player!: GameObjects.Ellipse;
     private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
+    private get canJump() {
+        return this.remainingJumpCount > 0;
+    }
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -126,12 +89,12 @@ export class Game extends Scene {
             this.playerSpawnY,
             40,
             40,
-            0xff0000
+            0xff0000,
         );
 
         // 场景开始时先生成一批底部平台。
         this.seedPlatforms();
-        this.addRock(600);
+        // this.addRock(600);
 
         this.physics.add.existing(this.player);
 
@@ -148,7 +111,7 @@ export class Game extends Scene {
             this.rocks,
             this.hitRock,
             undefined,
-            this
+            this,
         );
     }
 
@@ -160,49 +123,33 @@ export class Game extends Scene {
         this.updatePlayer();
     }
 
-    private hitRock(
-        _player: unknown,
-        rock: unknown
-    ) {
-
-        return
+    private hitRock(_player: unknown, rock: unknown) {
+        return;
         // Phaser 回调参数类型很宽，这里只把石头当成矩形处理。
-        const rockObject =
-            rock as GameObjects.Rectangle;
-
+        const rockObject = rock as GameObjects.Rectangle;
 
         if (this.isDashingDown) {
-            console.log("撞碎石头");
+            console.log('撞碎石头');
             rockObject.destroy();
-            const index =
-                this.rocks.indexOf(rockObject);
+            const index = this.rocks.indexOf(rockObject);
 
             if (index !== -1) {
                 this.rocks.splice(index, 1);
             }
-
-
         } else {
-
-            console.log("撞到石头，死亡");
+            console.log('撞到石头，死亡');
 
             this.respawnPlayer();
-
         }
-
     }
 
     private removeOffscreenRocks() {
-
         while (this.rocks.length > 0) {
-
             const rock = this.rocks[0];
-
 
             if (rock.x > -100) {
                 break;
             }
-
 
             rock.destroy();
 
@@ -211,252 +158,71 @@ export class Game extends Scene {
     }
 
     private updatePlayer() {
-
-        const body =
-            this.player.body as Phaser.Physics.Arcade.Body;
-
-
-        /**
-         * Phaser碰撞状态。
-         *
-         * true:
-         * 玩家脚下面检测到了碰撞物。
-         *
-         * 注意：
-         * blocked.down 不是绝对可靠的“站在地面”状态。
-         *
-         * 起跳后的极短时间内：
-         * blocked.down 可能仍然保持 true。
-         *
-         * 所以不能直接：
-         *
-         * if(isGrounded){
-         *     remainingJumpCount = maxJumpCount;
-         * }
-         *
-         * 否则会导致第一次跳跃被恢复，产生三段跳。
-         */
+        const body = this.player.body as Phaser.Physics.Arcade.Body;
         const isGrounded = body.blocked.down;
 
+        if (this.player.y > 700) {
+            this.respawnPlayer();
+            return;
+        }
 
+        if (Input.Keyboard.JustDown(this.cursors.space)) {
+            this.dashEndTime = this.time.now + this.dashDuration;
+        }
 
-        /**
-         * 默认清除水平速度。
-         *
-         * 后面根据：
-         *
-         * 左右移动
-         * 冲刺
-         *
-         * 重新设置速度。
-         */
+        const isDashing = this.time.now < this.dashEndTime;
+
+        // body.setCollideWorldBounds(true);
         body.setVelocityX(0);
 
+        // 上
+        // if (this.cursors.up.isDown && isGrounded) {
+        //     body.setVelocityY(-this.jumpSpeed);
+        // }
 
-
-        /**
-         * ==========================
-         *       二段跳核心逻辑
-         * ==========================
-         */
-
-
-        /**
-         * 玩家已经进入空中。
-         *
-         * 只要检测到一次：
-         *
-         * isGrounded === false
-         *
-         * 就说明玩家已经离开地面。
-         *
-         * 后面再次落地时，
-         * 才允许恢复跳跃次数。
-         */
+        // 玩家真正进入空中
         if (!isGrounded) {
-
             this.hasLeftGround = true;
-
         }
 
+        // 真正落地恢复跳跃次数
+        if (isGrounded && this.hasLeftGround) {
+            this.remainingJumpCount = this.maxJumpCount;
 
-
-        /**
-         * 真正落地恢复跳跃次数。
-         *
-         * 必须满足：
-         *
-         * 1. 当前在地面
-         *
-         * 2. 玩家之前离开过地面
-         *
-         * 防止：
-         *
-         * 起跳
-         * ↓
-         * blocked.down短暂仍为true
-         * ↓
-         * 错误恢复跳跃次数
-         *
-         */
-        if (
-            isGrounded &&
-            this.hasLeftGround
-        ) {
-
-            this.remainingJumpCount =
-                this.maxJumpCount;
-
-
-            /**
-             * 重置跳跃周期。
-             */
             this.hasLeftGround = false;
-
         }
 
-
-
-        /**
-         * ==========================
-         *          跳跃
-         * ==========================
-         */
-
-
-        /**
-         * JustDown:
-         *
-         * 只在按键按下瞬间触发一次。
-         *
-         * 防止长按↑导致每帧跳跃。
-         */
-        if (
-            Input.Keyboard.JustDown(this.cursors.up)
-            &&
-            this.canJump
-        ) {
-
-            /**
-             * Y轴向下为正。
-             *
-             * 所以负数代表向上跳。
-             */
+        // 二段跳
+        if (Input.Keyboard.JustDown(this.cursors.up) && this.canJump) {
             body.setVelocityY(-this.jumpSpeed);
 
-
-            /**
-             * 消耗一次跳跃次数。
-             */
             this.remainingJumpCount--;
-
         }
 
-
-
-        /**
-         * ==========================
-         *          下砸
-         * ==========================
-         */
-
-
-        if (
-            this.cursors.down.isDown &&
-            !isGrounded
-        ) {
-
+        // 下
+        if (this.cursors.down.isDown && !isGrounded) {
             this.isDashingDown = true;
-
-            body.setVelocityY(
-                this.dashDownSpeed
-            );
-
+            body.setVelocityY(this.dashDownSpeed);
         } else {
-
             this.isDashingDown = false;
-
         }
 
-
-
-        /**
-         * ==========================
-         *       左右移动
-         * ==========================
-         */
-
-
+        // 左
         if (this.cursors.left.isDown) {
-
             this.facingDirection = -1;
-
-            body.setVelocityX(
-                -this.playerSpeed
-            );
-
+            body.setVelocityX(-this.playerSpeed);
         }
 
-
+        // 右
         if (this.cursors.right.isDown) {
-
             this.facingDirection = 1;
-
-            body.setVelocityX(
-                this.playerSpeed
-            );
-
+            body.setVelocityX(this.playerSpeed);
         }
 
-
-
-        /**
-         * ==========================
-         *          冲刺
-         * ==========================
-         */
-
-
-        /**
-         * 按下空格开始冲刺计时。
-         */
-        if (
-            Input.Keyboard.JustDown(this.cursors.space)
-        ) {
-
-            this.dashEndTime =
-                this.time.now + this.dashDuration;
-
-        }
-
-
-
-        /**
-         * 当前是否处于冲刺状态。
-         */
-        const isDashing =
-            this.time.now < this.dashEndTime;
-
-
-
-        /**
-         * 冲刺期间持续保持速度。
-         *
-         * 因为前面：
-         *
-         * body.setVelocityX(0)
-         *
-         * 会清空水平速度。
-         */
+        // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
         if (isDashing) {
-
-            body.setVelocityX(
-                this.dashSpeed *
-                this.facingDirection
-            );
-
+            body.setVelocityX(this.dashSpeed * this.facingDirection);
         }
-
     }
 
     private respawnPlayer() {
@@ -465,42 +231,25 @@ export class Game extends Scene {
         // 停止所有速度
         body.setVelocity(0, 0);
 
-        // 回到出生点
-        this.player.setPosition(
-            this.playerSpawnX,
-            this.playerSpawnY
-        );
-
-        // 重生相当于开启新的行动周期，恢复二段跳次数并等待下一次真实落地判定。
         this.remainingJumpCount = this.maxJumpCount;
-        this.wasGrounded = false;
+
+        this.hasLeftGround = false;
+
+        // 回到出生点
+        this.player.setPosition(this.playerSpawnX, this.playerSpawnY);
     }
 
     /**
      * 添加石头
      */
-    private addRock(x: number) {
-
-        const rock = this.add.rectangle(
-            x,
-            this.platformY - 40,
-            40,
-            40,
-            0x555555
-        );
-
+    private addRock(x: number, platformY: number) {
+        const rock = this.add.rectangle(x, platformY - 40, 40, 40, 0x555555);
 
         rock.setOrigin(0, 1);
 
-
-        this.physics.add.existing(
-            rock,
-            true
-        );
-
+        this.physics.add.existing(rock, true);
 
         this.rocks.push(rock);
-
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -520,23 +269,42 @@ export class Game extends Scene {
         // 随机生成平台宽度，让每个平台长短不完全一样。
         const width = this.randomBetween(150, 300);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        // const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
-        const gap = 0;
+        const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
         // 新平台的起点等于“下一块平台位置”加上空隙。
         const x = this.nextPlatformX + gap;
+
+        /**
+         * 除了第一块平台以外，
+         * 后续平台都会在上一块平台的基础上，
+         * 上下浮动一定距离。
+         */
+        if (this.nextPlatformX !== 0) {
+            // 高度变化范围。
+            const offset = this.randomBetween(-40, 40);
+
+            // 更新当前平台高度。
+            this.currentPlatformY += offset;
+
+            // 限制平台不会太高或太低。
+            this.currentPlatformY = PhaserMath.Clamp(
+                this.currentPlatformY,
+                280,
+                420,
+            );
+        }
 
         // 创建一个矩形作为平台；这里没有使用任何图片素材。
         const platform = this.add.rectangle(
             // 矩形的 x 坐标；因为下面设置了左侧为原点，所以这是平台左边缘。
             x,
             // 矩形的 y 坐标；所有平台都放在同一条水平线上。
-            this.platformY,
+            this.currentPlatformY,
             // 矩形宽度；前面随机生成。
             width,
             // 矩形高度；使用固定值。
             this.platformHeight,
             // 矩形填充颜色；0x36d399 是绿色。
-            0x36d399
+            0x36d399,
         );
 
         // 把平台原点设置为左侧中点，方便用 x 表示平台左边缘。
@@ -548,6 +316,14 @@ export class Game extends Scene {
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);
+
+        /**
+         * 30% 概率在平台上生成石头。
+         */
+        if (Math.random() < 0.8) {
+            this.addRock(x + width / 2, this.currentPlatformY);
+        }
+
         // 更新下一块平台的起点：当前平台左边缘加当前平台宽度。
         this.nextPlatformX = x + width;
     }
@@ -561,20 +337,16 @@ export class Game extends Scene {
         for (const platform of this.platforms) {
             platform.x -= moveDistance;
 
-            const body =
-                platform.body as Phaser.Physics.Arcade.StaticBody;
+            const body = platform.body as Phaser.Physics.Arcade.StaticBody;
             // 更新刚体位置
             body.updateFromGameObject();
         }
 
         // 石头移动
         for (const rock of this.rocks) {
-
             rock.x -= moveDistance;
 
-
-            const body =
-                rock.body as Phaser.Physics.Arcade.StaticBody;
+            const body = rock.body as Phaser.Physics.Arcade.StaticBody;
 
             body.updateFromGameObject();
         }

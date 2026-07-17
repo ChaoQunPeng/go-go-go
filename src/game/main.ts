@@ -11,25 +11,23 @@ const config: Types.Core.GameConfig = {
     backgroundColor: '#fff',
     scale: {
         mode: Scale.FIT,
-        autoCenter: Scale.CENTER_BOTH
+        autoCenter: Scale.CENTER_BOTH,
     },
-    scene: [
-        MainGame
-    ],
+    scene: [MainGame],
     physics: {
         default: 'arcade',
         arcade: {
             gravity: {
                 x: 0,
-                y: 1000
+                y: 1000,
             },
-            debug: true
-        }
+            debug: true,
+        },
     },
 };
 
 const StartGame = (parent: string) => {
     return new Game({ ...config, parent });
-}
+};
 
 export default StartGame;
