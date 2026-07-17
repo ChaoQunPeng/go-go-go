@@ -1,5 +1,6 @@
 // 从 Phaser 里导入需要用到的类型和基类。
 import { GameObjects, Input, Scene, Math as PhaserMath } from 'phaser';
+import { Player } from "../player/player.ts";
 
 /**
  * 创建平台时可配置的业务选项。
@@ -11,82 +12,27 @@ interface AddPlatformOptions {
 
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
-    // 保存当前还存在于画面中的平台；每个平台都是一个 Phaser 矩形对象。
-    private platforms: GameObjects.Rectangle[] = [];
-    // 石头数组
-    private rocks: GameObjects.Rectangle[] = [];
-    // 记录下一块平台应该从哪个 x 坐标开始生成；x 越大，位置越靠右。
-    private nextPlatformX = 0;
+    private player!: Player;
+    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
     // 游戏画布的逻辑宽度；这里要和 src/game/main.ts 里的 width 保持一致。
     private readonly worldWidth = 1024;
-    // 平台的 y 坐标；y 越大，位置越靠下，所以 660 接近画面底部。
-    // private readonly platformY = 360;
-    /**
-     * 当前生成平台的高度。
-     *
-     * 后续每生成一个平台，
-     * 都会根据上一块平台进行上下浮动。
-     */
+
+    // #region 平台相关
+    // 保存当前还存在于画面中的平台；每个平台都是一个 Phaser 矩形对象。
+    private platforms: GameObjects.Rectangle[] = [];
+    // 记录下一块平台应该从哪个 x 坐标开始生成；x 越大，位置越靠右。
+    private nextPlatformX = 0;
+    // 当前生成平台的高度
     private currentPlatformY = 360;
     // 每块平台的高度；这里只影响平台看起来有多厚。
     private readonly platformHeight = 44;
     // 平台每秒向左移动多少像素；数值越大，游戏节奏越快。
     private readonly platformSpeed = 100;
-    // 玩家每秒向右移动多少像素；数值越大，游戏节奏越快。
-    private readonly playerSpeed = 300;
-    // 玩家跳跃时，每秒向上移动多少像素；数值越大，游戏越快。
-    private readonly jumpSpeed = 500;
-    // 玩家向下冲刺时每秒向下移动多少像素。
-    private readonly dashDownSpeed = 800;
+    // 石头数组
+    private rocks: GameObjects.Rectangle[] = [];
+    // #endregion
 
-    private readonly dashDistance = 200;
-
-    // 水平冲刺持续时间，单位是毫秒。
-    private readonly dashDuration = 150;
-    // 玩家按空格水平冲刺时每秒向右移动多少像素。
-    private get dashSpeed() {
-        return this.dashDistance / (this.dashDuration / 1000);
-    }
-
-    /**
-     * 玩家当前是否处于水平冲刺期间。
-     *
-     * 根据冲刺结束时间实时计算，供移动和后续撞击逻辑统一判断。
-     */
-    private get isDashing() {
-        return this.time.now < this.dashEndTime;
-    }
-
-    private readonly playerSpawnX = 100;
-    private readonly playerSpawnY = 300;
-
-    private isDashingDown = false;
-    private dashEndTime = 0;
-
-    // 当前还剩多少次可跳。
-    private remainingJumpCount = 2;
-
-    // 最大跳跃次数。
-    private readonly maxJumpCount = 2;
-
-    private facingDirection = 1;
-
-    /**
-     * 是否已经真正离开过地面。
-     *
-     * 用来避免：
-     * 起跳后的1~2帧 blocked.down 仍然为 true，
-     * 导致跳跃次数被错误恢复。
-     */
-    private hasLeftGround = false;
-
-    private player!: GameObjects.Ellipse;
-    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-
-    private get canJump() {
-        return this.remainingJumpCount > 0;
-    }
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -101,26 +47,16 @@ export class Game extends Scene {
 
     // create 是 Phaser 的场景创建阶段，适合放初始化画面内容的代码。
     create() {
-        this.player = this.add.ellipse(
-            this.playerSpawnX,
-            this.playerSpawnY,
-            40,
-            40,
-            0xff0000,
-        );
+        this.player = new Player(this, 100, 300);
 
         // 场景开始时先生成一批底部平台。
         this.seedPlatforms();
 
-        this.physics.add.existing(this.player);
-
         if (!this.input.keyboard) {
             return;
         }
-        this.cursors = this.input.keyboard.createCursorKeys();
 
-        const firstPlatform = this.platforms[0];
-        this.physics.add.collider(this.player, firstPlatform);
+        this.cursors = this.input.keyboard.createCursorKeys();
 
         this.physics.add.overlap(
             this.player,
@@ -135,15 +71,14 @@ export class Game extends Scene {
     update(_: number, delta: number) {
         // Phaser 传进来的 delta 单位是毫秒，这里除以 1000 转成秒。
         this.scrollWorld(delta / 1000);
-
-        this.updatePlayer();
+        this.player.update(this.cursors);
     }
 
     private hitRock(_player: unknown, rock: unknown) {
         // Phaser 回调参数类型很宽，这里只把石头当成矩形处理。
         const rockObject = rock as GameObjects.Rectangle;
 
-        if (this.isDashingDown || this.isDashing) {
+        if (this.player.isDashingDownState || this.player.isDashing) {
             console.log('撞碎石头');
             rockObject.destroy();
             const index = this.rocks.indexOf(rockObject);
@@ -153,8 +88,6 @@ export class Game extends Scene {
             }
         } else {
             console.log('撞到石头，死亡');
-
-            this.respawnPlayer();
         }
     }
 
@@ -170,86 +103,6 @@ export class Game extends Scene {
 
             this.rocks.shift();
         }
-    }
-
-    private updatePlayer() {
-        const body = this.player.body as Phaser.Physics.Arcade.Body;
-        const isGrounded = body.blocked.down;
-
-        if (this.player.y > 700) {
-            this.respawnPlayer();
-            return;
-        }
-
-        if (Input.Keyboard.JustDown(this.cursors.space)) {
-            this.dashEndTime = this.time.now + this.dashDuration;
-        }
-
-        // body.setCollideWorldBounds(true);
-        body.setVelocityX(0);
-
-        // 上
-        // if (this.cursors.up.isDown && isGrounded) {
-        //     body.setVelocityY(-this.jumpSpeed);
-        // }
-
-        // 玩家真正进入空中
-        if (!isGrounded) {
-            this.hasLeftGround = true;
-        }
-
-        // 真正落地恢复跳跃次数
-        if (isGrounded && this.hasLeftGround) {
-            this.remainingJumpCount = this.maxJumpCount;
-
-            this.hasLeftGround = false;
-        }
-
-        // 二段跳
-        if (Input.Keyboard.JustDown(this.cursors.up) && this.canJump) {
-            body.setVelocityY(-this.jumpSpeed);
-
-            this.remainingJumpCount--;
-        }
-
-        // 下
-        if (this.cursors.down.isDown && !isGrounded) {
-            this.isDashingDown = true;
-            body.setVelocityY(this.dashDownSpeed);
-        } else {
-            this.isDashingDown = false;
-        }
-
-        // 左
-        if (this.cursors.left.isDown) {
-            this.facingDirection = -1;
-            body.setVelocityX(-this.playerSpeed);
-        }
-
-        // 右
-        if (this.cursors.right.isDown) {
-            this.facingDirection = 1;
-            body.setVelocityX(this.playerSpeed);
-        }
-
-        // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
-        if (this.isDashing) {
-            body.setVelocityX(this.dashSpeed * this.facingDirection);
-        }
-    }
-
-    private respawnPlayer() {
-        const body = this.player.body as Phaser.Physics.Arcade.Body;
-
-        // 停止所有速度
-        body.setVelocity(0, 0);
-
-        this.remainingJumpCount = this.maxJumpCount;
-
-        this.hasLeftGround = false;
-
-        // 回到出生点
-        this.player.setPosition(this.playerSpawnX, this.playerSpawnY);
     }
 
     /**
@@ -356,7 +209,7 @@ export class Game extends Scene {
      */
     private scrollWorld(deltaSeconds: number) {
         // 水平冲刺期间提高世界滚动速度，增强玩家向前冲刺的速度感。
-        const speedMultiplier = this.isDashing ? 3 : 1;
+        const speedMultiplier = this.player.isDashingDownState ? 1 : 1;
         const scrollDistance =
             this.platformSpeed * deltaSeconds * speedMultiplier;
 
