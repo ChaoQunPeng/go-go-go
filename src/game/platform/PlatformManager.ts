@@ -1,5 +1,6 @@
 import { GameObjects, Math as PhaserMath, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
+import { moveObjects } from '../world/moveObjects.ts';
 
 /**
  * 创建平台时可配置的业务选项。
@@ -26,14 +27,11 @@ export class PlatformManager {
         this.seedPlatforms();
     }
 
-    update() {
+    update(scrollDistance: number) {
         // 平台移动后，清理离屏平台并补充右侧平台。
+        moveObjects(this.platforms, scrollDistance);
         this.removeOffscreenPlatforms();
         this.extendPlatformTrack();
-    }
-
-    getPlatforms(): GameObjects.Rectangle[] {
-        return this.platforms;
     }
 
     // 初始化第一批平台，让画面一开始就有路可以显示。
@@ -59,9 +57,9 @@ export class PlatformManager {
         const { allowRock = true } = options;
 
         // 随机生成平台宽度，让每个平台长短不完全一样。
-        const width = this.randomBetween(150, 300);
+        const width = PhaserMath.Between(150, 300);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        const gap = this.nextPlatformX === 0 ? 0 : this.randomBetween(90, 180);
+        const gap = this.nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
         // 新平台的起点等于“下一块平台位置”加上空隙。
         const x = this.nextPlatformX + gap;
 
@@ -72,7 +70,7 @@ export class PlatformManager {
          */
         if (this.nextPlatformX !== 0) {
             // 高度变化范围。
-            const offset = this.randomBetween(-40, 40);
+            const offset = PhaserMath.Between(-40, 40);
 
             // 更新当前平台高度。
             this.currentPlatformY += offset;
@@ -163,10 +161,5 @@ export class PlatformManager {
             // 每循环一次，就在右边追加一块平台。
             this.addPlatform();
         }
-    }
-
-    private randomBetween(min: number, max: number) {
-        // Math.random() 生成 0 到 1 之间的小数，再换算成指定范围的整数。
-        return Math.floor(Math.random() * (max - min + 1)) + min;
     }
 }

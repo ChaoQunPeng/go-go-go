@@ -1,7 +1,6 @@
 // 从 Phaser 里导入需要用到的类型和基类。
 import { Types, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
-import { WorldManager } from '../world/WorldManager.ts';
 import { PlatformManager } from '../platform/PlatformManager.ts';
 import { RockManager } from '../rock/RockManager.ts';
 
@@ -9,9 +8,9 @@ import { RockManager } from '../rock/RockManager.ts';
 export class Game extends Scene {
     private player!: Player;
     private cursors!: Types.Input.Keyboard.CursorKeys;
-    private worldManager!: WorldManager;
     private platformManager!: PlatformManager;
     private rockManager!: RockManager;
+    private readonly worldSpeed = 100;
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -27,7 +26,6 @@ export class Game extends Scene {
     create() {
         this.player = new Player(this, 100, 300);
         this.rockManager = new RockManager(this, this.player);
-        this.worldManager = new WorldManager();
         this.platformManager = new PlatformManager(
             this,
             this.player,
@@ -47,16 +45,12 @@ export class Game extends Scene {
     }
 
     update(_: number, delta: number) {
-        // 先移动平台和石头。
-        this.worldManager.update(
-            delta / 1000,
-            this.platformManager.getPlatforms(),
-            this.rockManager.getRocks(),
-        );
+        // Phaser 的 delta 是毫秒，统一换算成本帧滚动距离。
+        const scrollDistance = this.worldSpeed * (delta / 1000);
 
-        // 移动后再清理并补充平台。
-        this.platformManager.update();
-        this.rockManager.update();
+        // 先更新已有石头，避免新平台生成的石头在出生帧立即移动。
+        this.rockManager.update(scrollDistance);
+        this.platformManager.update(scrollDistance);
 
         this.player.update(this.cursors);
     }

@@ -1,5 +1,6 @@
 import { GameObjects, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
+import { moveObjects } from '../world/moveObjects.ts';
 
 export class RockManager {
     private rocks: GameObjects.Rectangle[] = [];
@@ -20,7 +21,8 @@ export class RockManager {
         );
     }
 
-    update() {
+    update(scrollDistance: number) {
+        moveObjects(this.rocks, scrollDistance);
         this.removeOffscreenRocks();
     }
 
@@ -36,11 +38,6 @@ export class RockManager {
         rock.setOrigin(0, 1);
         this.scene.physics.add.existing(rock, true);
         this.rocks.push(rock);
-    }
-
-    // WorldManager 调整前，暂时提供现有石头集合。
-    getRocks(): GameObjects.Rectangle[] {
-        return this.rocks;
     }
 
     private hitRock(_player: unknown, rock: unknown) {
