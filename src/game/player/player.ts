@@ -1,4 +1,4 @@
-import { Input, Physics, Scene, Types } from "phaser";
+import { Input, Physics, Scene, Types } from 'phaser';
 
 export class Player extends Physics.Arcade.Sprite {
     private readonly sceneRef: Scene;
@@ -12,20 +12,19 @@ export class Player extends Physics.Arcade.Sprite {
     private remainingJumpCount = this.maxJumpCount;
     private hasLeftGround = false;
 
-
     // 冲撞/下撞
     private readonly dashDownSpeed = 800;
-    private isDashingDown = false;
+    private dashingDown = false;
 
-    public get isDashingDownState() {
-        return this.isDashingDown;
+    public get isDashingDown() {
+        return this.dashingDown;
     }
     private readonly dashDistance = 200;
     private readonly dashDuration = 150;
     private dashEndTime = 0;
 
     constructor(scene: Scene, x: number, y: number) {
-        super(scene, x, y, "player");
+        super(scene, x, y, 'player');
         this.sceneRef = scene;
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -55,39 +54,25 @@ export class Player extends Physics.Arcade.Sprite {
             return;
         }
 
-        if (Input.Keyboard.JustDown(cursors.space)) {
-            this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
-        }
-
-        // body.setCollideWorldBounds(true);
         body.setVelocityX(0);
 
-        // 玩家真正进入空中
-        if (!isGrounded) {
-            this.hasLeftGround = true;
-        }
+        this.updateGroundState(isGrounded);
 
-        // 真正落地恢复跳跃次数
-        if (isGrounded && this.hasLeftGround) {
-            this.remainingJumpCount = this.maxJumpCount;
+        // 移动
+        this.handleMove(cursors);
 
-            this.hasLeftGround = false;
-        }
-
-        // 二段跳
-        if (Input.Keyboard.JustDown(cursors.up) && this.canJump) {
-            body.setVelocityY(-this.jumpSpeed);
-
-            this.remainingJumpCount--;
-        }
+        // 跳
+        this.handleJump(cursors);
 
         // 下
-        if (cursors.down.isDown && !isGrounded) {
-            this.isDashingDown = true;
-            body.setVelocityY(this.dashDownSpeed);
-        } else {
-            this.isDashingDown = false;
-        }
+        this.handleDownDash(cursors, isGrounded);
+
+        // 冲刺
+        this.handleDash(cursors);
+    }
+
+    private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
+        const body = this.body as Physics.Arcade.Body;
 
         // 左
         if (cursors.left.isDown) {
@@ -100,24 +85,56 @@ export class Player extends Physics.Arcade.Sprite {
             this.facingDirection = 1;
             body.setVelocityX(this.playerSpeed);
         }
+    }
 
-        // 冲刺期间每帧保持速度，避免被每帧重置速度抵消。
+    private handleJump(cursors: Types.Input.Keyboard.CursorKeys) {
+        const body = this.body as Physics.Arcade.Body;
+        if (Input.Keyboard.JustDown(cursors.up) && this.canJump) {
+            body.setVelocityY(-this.jumpSpeed);
+
+            this.remainingJumpCount--;
+        }
+    }
+
+    private handleDash(cursors: Types.Input.Keyboard.CursorKeys) {
+        const body = this.body as Physics.Arcade.Body;
+
+        // 开始冲刺
+        if (Input.Keyboard.JustDown(cursors.space)) {
+            this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
+        }
+
+        // 冲刺期间保持速度
         if (this.isDashing) {
             body.setVelocityX(this.dashSpeed * this.facingDirection);
         }
     }
 
-    private respawnPlayer() {
-        const body = this.body as Phaser.Physics.Arcade.Body;
+    private handleDownDash(
+        cursors: Types.Input.Keyboard.CursorKeys,
+        isGrounded: boolean,
+    ) {
+        const body = this.body as Physics.Arcade.Body;
+        // 下
+        if (cursors.down.isDown && !isGrounded) {
+            this.dashingDown = true;
+            body.setVelocityY(this.dashDownSpeed);
+        } else {
+            this.dashingDown = false;
+        }
+    }
 
-        // 停止所有速度
-        body.setVelocity(0, 0);
+    private updateGroundState(isGrounded: boolean) {
+        // 玩家离开地面
+        if (!isGrounded) {
+            this.hasLeftGround = true;
+        }
 
-        this.remainingJumpCount = this.maxJumpCount;
+        // 玩家真正落地
+        if (isGrounded && this.hasLeftGround) {
+            this.remainingJumpCount = this.maxJumpCount;
 
-        this.hasLeftGround = false;
-
-        // 回到出生点
-        // this.setPosition(this.playerSpawnX, this.playerSpawnY);
+            this.hasLeftGround = false;
+        }
     }
 }

@@ -1,6 +1,6 @@
 // 从 Phaser 里导入需要用到的类型和基类。
-import { GameObjects, Input, Scene, Math as PhaserMath } from 'phaser';
-import { Player } from "../player/player.ts";
+import { GameObjects, Input, Types, Scene, Math as PhaserMath } from 'phaser';
+import { Player } from '../player/player.ts';
 
 /**
  * 创建平台时可配置的业务选项。
@@ -13,7 +13,7 @@ interface AddPlatformOptions {
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
     private player!: Player;
-    private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+    private cursors!: Types.Input.Keyboard.CursorKeys;
 
     // 游戏画布的逻辑宽度；这里要和 src/game/main.ts 里的 width 保持一致。
     private readonly worldWidth = 1024;
@@ -32,7 +32,6 @@ export class Game extends Scene {
     // 石头数组
     private rocks: GameObjects.Rectangle[] = [];
     // #endregion
-
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -78,7 +77,7 @@ export class Game extends Scene {
         // Phaser 回调参数类型很宽，这里只把石头当成矩形处理。
         const rockObject = rock as GameObjects.Rectangle;
 
-        if (this.player.isDashingDownState || this.player.isDashing) {
+        if (this.player.isDashingDown || this.player.isDashing) {
             console.log('撞碎石头');
             rockObject.destroy();
             const index = this.rocks.indexOf(rockObject);
@@ -209,7 +208,7 @@ export class Game extends Scene {
      */
     private scrollWorld(deltaSeconds: number) {
         // 水平冲刺期间提高世界滚动速度，增强玩家向前冲刺的速度感。
-        const speedMultiplier = this.player.isDashingDownState ? 1 : 1;
+        const speedMultiplier = this.player.isDashingDown ? 1 : 1;
         const scrollDistance =
             this.platformSpeed * deltaSeconds * speedMultiplier;
 
