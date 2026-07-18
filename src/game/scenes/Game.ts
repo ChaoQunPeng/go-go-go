@@ -10,7 +10,7 @@ export class Game extends Scene {
     private cursors!: Types.Input.Keyboard.CursorKeys;
     private platformManager!: PlatformManager;
     private rockManager!: RockManager;
-    private readonly worldSpeed = 100;
+    private readonly worldSpeed = 200;
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -29,23 +29,19 @@ export class Game extends Scene {
         this.platformManager = new PlatformManager(
             this,
             this.player,
-            // 平台只决定石头位置，RockManager 负责石头生命周期。
-            (x, platformY) => this.rockManager.add(x, platformY),
+            (x, platformY) => {
+                return this.rockManager.add(x, platformY);
+            },
         );
 
-        // 场景开始时先生成一批底部平台。
         this.platformManager.create();
-
-        if (!this.input.keyboard) {
-            return;
-        }
-
-        this.cursors = this.input.keyboard.createCursorKeys();
         this.rockManager.create();
+
+        this.initCursors();
     }
 
     update(_: number, delta: number) {
-        // Phaser 的 delta 是毫秒，统一换算成本帧滚动距离。
+        // delta 是毫秒，统一换算成本帧滚动距离。
         const scrollDistance = this.worldSpeed * (delta / 1000);
 
         // 先更新已有石头，避免新平台生成的石头在出生帧立即移动。
@@ -53,5 +49,13 @@ export class Game extends Scene {
         this.platformManager.update(scrollDistance);
 
         this.player.update(this.cursors);
+    }
+
+    initCursors() {
+        if (!this.input.keyboard) {
+            return;
+        }
+
+        this.cursors = this.input.keyboard.createCursorKeys();
     }
 }

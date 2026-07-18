@@ -14,13 +14,9 @@ export class Player extends Physics.Arcade.Sprite {
 
     // 冲撞/下撞
     private readonly dashDownSpeed = 800;
-    private dashingDown = false;
-
-    public get isDashingDown() {
-        return this.dashingDown;
-    }
     private readonly dashDistance = 200;
     private readonly dashDuration = 150;
+    private dashingDown = false;
     private dashEndTime = 0;
 
     constructor(scene: Scene, x: number, y: number) {
@@ -39,6 +35,10 @@ export class Player extends Physics.Arcade.Sprite {
     }
     public get isDashing() {
         return this.sceneRef.time.now < this.dashEndTime;
+    }
+
+    public get isDashingDown() {
+        return this.dashingDown;
     }
 
     update(cursors: Types.Input.Keyboard.CursorKeys) {
