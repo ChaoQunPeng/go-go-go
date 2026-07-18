@@ -5,6 +5,12 @@ import { PlatformManager } from '../platform/PlatformManager.ts';
 import { RockManager } from '../rock/RockManager.ts';
 import { ScoreManager } from '../score/ScoreManager.ts';
 
+type GameState = 'waiting' | 'playing' | 'game-over';
+
+interface GameSceneData {
+    startImmediately?: boolean;
+}
+
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
     private player!: Player;
@@ -12,6 +18,7 @@ export class Game extends Scene {
     private platformManager!: PlatformManager;
     private rockManager!: RockManager;
     private scoreManager: ScoreManager;
+    private gameState: GameState = 'waiting';
 
     private readonly worldSpeed = 200;
 
@@ -26,9 +33,28 @@ export class Game extends Scene {
         // 当前 demo 暂时不加载图片、音频等外部资源。
     }
 
-    create() {
+    create(data: GameSceneData = {}) {
+        this.gameState = 'waiting';
+        this.initCursors();
+
+        if (data.startImmediately) {
+            this.startGame();
+            return;
+        }
+
+        this.showStartScreen();
+    }
+
+    private startGame() {
+        this.gameState = 'playing';
+        this.physics.resume();
+        // 重新开始后恢复开发阶段使用的物理调试边框。
+        this.physics.world.debugGraphic?.setVisible(true);
+
         this.player = new Player(this, 100, 300);
-        this.rockManager = new RockManager(this, this.player);
+        this.rockManager = new RockManager(this, this.player, () => {
+            this.gameOver();
+        });
         this.scoreManager = new ScoreManager(this);
         this.platformManager = new PlatformManager(
             this,
@@ -41,11 +67,13 @@ export class Game extends Scene {
         this.platformManager.create();
         this.rockManager.create();
         this.scoreManager.create();
-
-        this.initCursors();
     }
 
     update(_: number, delta: number) {
+        if (this.gameState !== 'playing') {
+            return;
+        }
+
         // delta 是毫秒，统一换算成本帧滚动距离。
         const scrollDistance = this.worldSpeed * (delta / 1000);
 
@@ -54,6 +82,99 @@ export class Game extends Scene {
         this.platformManager.update(scrollDistance);
         this.scoreManager.update(scrollDistance);
         this.player.update(this.cursors);
+
+        // 玩家掉出画面后，统一进入游戏结束流程。
+        if (this.player.y > 700) {
+            this.gameOver();
+        }
+    }
+
+    private showStartScreen() {
+        const startButton = this.createButton(
+            this.cameras.main.centerY,
+            '开始游戏',
+        );
+
+        startButton.once('pointerdown', () => {
+            startButton.destroy();
+            this.startGame();
+        });
+    }
+
+    private gameOver() {
+        if (this.gameState !== 'playing') {
+            return;
+        }
+
+        this.gameState = 'game-over';
+        this.physics.pause();
+        // 调试图层层级最高，需要单独隐藏才能展示完整结算画面。
+        this.physics.world.debugGraphic?.setVisible(false);
+
+        // 使用不透明遮罩完全覆盖底层游戏画面。
+        this.add
+            .rectangle(
+                this.cameras.main.centerX,
+                this.cameras.main.centerY,
+                this.scale.width,
+                this.scale.height,
+                0xffffff,
+                1,
+            )
+            .setDepth(2000);
+
+        this.add
+            .text(
+                this.cameras.main.centerX,
+                this.cameras.main.centerY - 80,
+                '游戏结束',
+                {
+                    fontSize: '48px',
+                    color: '#000000',
+                },
+            )
+            .setOrigin(0.5)
+            .setDepth(2001);
+
+        // 读取 ScoreManager 中的最终分数并展示在结算页。
+        this.add
+            .text(
+                this.cameras.main.centerX,
+                this.cameras.main.centerY - 10,
+                `本局分数：${this.scoreManager.getScore()}`,
+                {
+                    fontSize: '32px',
+                    color: '#000000',
+                },
+            )
+            .setOrigin(0.5)
+            .setDepth(2001);
+
+        const restartButton = this.createButton(
+            this.cameras.main.centerY + 70,
+            '重新开始',
+        );
+
+        restartButton.once('pointerdown', () => {
+            // 重启场景，让玩家、平台、石头和分数统一回到初始状态。
+            this.scene.restart({ startImmediately: true });
+        });
+    }
+
+    private createButton(y: number, label: string) {
+        return this.add
+            .text(this.cameras.main.centerX, y, label, {
+                fontSize: '32px',
+                color: '#ffffff',
+                backgroundColor: '#0f766e',
+                padding: {
+                    x: 24,
+                    y: 12,
+                },
+            })
+            .setOrigin(0.5)
+            .setDepth(2001)
+            .setInteractive({ useHandCursor: true });
     }
 
     initCursors() {

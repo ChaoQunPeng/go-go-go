@@ -25,7 +25,8 @@ export class ScoreManager {
         this.renderScore();
     }
 
-    private getScore() {
+    // 向结算页面提供当前的整数分数。
+    public getScore() {
         return Math.floor(this.score);
     }
 

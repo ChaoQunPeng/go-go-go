@@ -3,7 +3,7 @@ import { Input, Physics, Scene, Types } from 'phaser';
 export class Player extends Physics.Arcade.Sprite {
     private readonly sceneRef: Scene;
 
-    private readonly playerSpeed = 300;
+    private readonly playerSpeed = 500;
     private facingDirection = 1;
 
     // 跳跃相关

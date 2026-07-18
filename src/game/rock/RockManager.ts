@@ -8,6 +8,7 @@ export class RockManager {
     constructor(
         private scene: Scene,
         private player: Player,
+        private onPlayerDeath: () => void,
     ) {}
 
     create() {
@@ -53,7 +54,8 @@ export class RockManager {
                 this.rocks.splice(index, 1);
             }
         } else {
-            console.log('撞到石头，死亡');
+            // 只上报死亡结果，由场景统一处理游戏结束流程。
+            this.onPlayerDeath();
         }
     }
 
