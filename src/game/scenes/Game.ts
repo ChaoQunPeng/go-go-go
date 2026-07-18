@@ -3,6 +3,7 @@ import { Types, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
 import { PlatformManager } from '../platform/PlatformManager.ts';
 import { RockManager } from '../rock/RockManager.ts';
+import { ScoreManager } from '../score/ScoreManager.ts';
 
 // 定义一个名叫 Game 的场景类，Phaser 会把它当成一个游戏画面来运行。
 export class Game extends Scene {
@@ -10,6 +11,8 @@ export class Game extends Scene {
     private cursors!: Types.Input.Keyboard.CursorKeys;
     private platformManager!: PlatformManager;
     private rockManager!: RockManager;
+    private scoreManager: ScoreManager;
+
     private readonly worldSpeed = 200;
 
     // 构造函数会在创建这个场景时执行一次。
@@ -26,6 +29,7 @@ export class Game extends Scene {
     create() {
         this.player = new Player(this, 100, 300);
         this.rockManager = new RockManager(this, this.player);
+        this.scoreManager = new ScoreManager(this);
         this.platformManager = new PlatformManager(
             this,
             this.player,
@@ -36,6 +40,7 @@ export class Game extends Scene {
 
         this.platformManager.create();
         this.rockManager.create();
+        this.scoreManager.create();
 
         this.initCursors();
     }
@@ -47,7 +52,7 @@ export class Game extends Scene {
         // 先更新已有石头，避免新平台生成的石头在出生帧立即移动。
         this.rockManager.update(scrollDistance);
         this.platformManager.update(scrollDistance);
-
+        this.scoreManager.update(scrollDistance);
         this.player.update(this.cursors);
     }
 
