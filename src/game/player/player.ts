@@ -26,8 +26,12 @@ export class Player extends Physics.Arcade.Sprite {
         scene.physics.add.existing(this);
 
         const body = this.body as Physics.Arcade.Body;
-        // 缩小玩家碰撞体，让碰到石头时更贴近视觉边缘。
-        body.setSize(this.width * 0.5, this.height * 0.5, true);
+        const bodyWidth = this.width * 0.5;
+        const bodyHeight = this.height * 0.8;
+
+        // 碰撞体横向居中、底部对齐，避免缩小后玩家陷入平台。
+        body.setSize(bodyWidth, bodyHeight, false);
+        body.setOffset((this.width - bodyWidth) / 2, this.height - bodyHeight);
     }
 
     private get canJump() {
