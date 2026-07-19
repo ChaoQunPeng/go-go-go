@@ -95,7 +95,7 @@ export class Player extends Physics.Arcade.Sprite {
         this.handleDownDash(cursors, isGrounded);
 
         // 冲刺
-        this.handleDash(cursors);
+        this.handleDash(cursors, isGrounded);
     }
 
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
@@ -123,12 +123,16 @@ export class Player extends Physics.Arcade.Sprite {
         }
     }
 
-    private handleDash(cursors: Types.Input.Keyboard.CursorKeys) {
+    private handleDash(
+        cursors: Types.Input.Keyboard.CursorKeys,
+        isGrounded: boolean,
+    ) {
         const body = this.body as Physics.Arcade.Body;
 
         // 开始冲刺
         if (
             Input.Keyboard.JustDown(cursors.space) &&
+            !isGrounded &&
             this.canDash &&
             !this.isDashing
         ) {
