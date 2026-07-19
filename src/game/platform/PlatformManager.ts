@@ -1,4 +1,4 @@
-import { GameObjects, Math as PhaserMath, Scene } from 'phaser';
+import { GameObjects, Math as PhaserMath, Physics, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
 import { moveObjects } from '../world/moveObjects.ts';
 
@@ -10,6 +10,8 @@ interface AddPlatformOptions {
     allowRock?: boolean;
     /** 当前平台是否允许生成道具，普通平台默认允许。 */
     allowItem?: boolean;
+    /** 固定平台的左侧起点，未指定时接在主路线后方。 */
+    startX?: number;
     maxWidth?: number;
     minWidth?: number;
 }
@@ -29,6 +31,10 @@ export class PlatformManager {
     private readonly platformRowCount = 3;
     private nextPlatformX = 0;
     private currentPlatformRow = 1;
+    // 记录上一块平台的换层方向，避免相邻平台连续同向换层。
+    private lastRowDirection = 0;
+    // 难度预留为 0~1，当前从最低难度开始生成。
+    private difficulty = 0;
     private readonly platformHeight = 44;
     private readonly worldWidth = 1024;
     private scene: Scene;
@@ -60,6 +66,7 @@ export class PlatformManager {
     private seedPlatforms() {
         this.nextPlatformX = 0;
         this.currentPlatformRow = 1;
+        this.lastRowDirection = 0;
 
         // 出生平台不生成石头和道具，给玩家留出开局准备时间。
         this.addPlatform(this.currentPlatformRow, {
@@ -68,6 +75,17 @@ export class PlatformManager {
             minWidth: 1000,
             maxWidth: 1000,
         });
+
+        // 准备区后半段增加上层平台，让玩家开局即可开始换层。
+        this.addPlatform(0, {
+            allowRock: false,
+            allowItem: false,
+            startX: 600,
+            minWidth: 400,
+            maxWidth: 400,
+        });
+        this.currentPlatformRow = 0;
+        this.lastRowDirection = -1;
 
         this.extendPlatformTrack();
     }
@@ -79,15 +97,12 @@ export class PlatformManager {
         // 普通平台默认允许生成石头，调用方只需声明特殊平台的差异。
         const { allowRock = true, allowItem = true } = options;
 
-        // 随机生成平台宽度，让每个平台长短不完全一样。
-        const width = PhaserMath.Between(
-            options.minWidth ?? 150,
-            options.maxWidth ?? 300,
-        );
+        // 平台宽度由当前难度控制，特殊平台仍可指定固定范围。
+        const width = this.getPlatformWidth(options);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        const gap = this.nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
+        const gap = this.nextPlatformX === 0 ? 0 : this.getPlatformGap();
         // 新平台的起点等于“下一块平台位置”加上空隙。
-        const x = this.nextPlatformX + gap;
+        const x = options.startX ?? this.nextPlatformX + gap;
         const platformY = this.platformRows[rowIndex];
 
         // 创建一个矩形作为平台；这里没有使用任何图片素材。
@@ -109,7 +124,22 @@ export class PlatformManager {
         // 给平台加一条边框，让平台更容易看清楚。
         platform.setStrokeStyle(3, 0x0f766e);
         this.scene.physics.add.existing(platform, true);
-        this.scene.physics.add.collider(this.player, platform);
+        this.scene.physics.add.collider(
+            this.player,
+            platform,
+            undefined,
+            () => {
+                const playerBody = this.player.body as Physics.Arcade.Body;
+                const platformBody = platform.body as Physics.Arcade.StaticBody;
+                const previousBottom = playerBody.prev.y + playerBody.height;
+
+                // 上升时穿过平台，只在从平台上方下落时处理碰撞。
+                return (
+                    playerBody.velocity.y >= 0 &&
+                    previousBottom <= platformBody.top
+                );
+            },
+        );
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);
@@ -132,16 +162,57 @@ export class PlatformManager {
         this.nextPlatformX = x + width;
     }
 
+    private getNextPlatformRow(): number {
+        // 大部分平台保持同一高度，让路线有稳定的跑酷节奏。
+        if (Math.random() < 0.6) {
+            // 同层平台提供缓冲，之后允许重新选择换层方向。
+            this.lastRowDirection = 0;
+            return this.currentPlatformRow;
+        }
+
+        const directions = [-1, 1].filter((direction) => {
+            const nextRow = this.currentPlatformRow + direction;
+            const isInsideRows =
+                nextRow >= 0 && nextRow < this.platformRowCount;
+
+            return isInsideRows && direction !== this.lastRowDirection;
+        });
+        const direction =
+            directions[PhaserMath.Between(0, directions.length - 1)];
+
+        this.lastRowDirection = direction;
+        return this.currentPlatformRow + direction;
+    }
+
+    private getPlatformGap() {
+        const minGap = 80;
+        const maxGap = Math.round(160 + this.difficulty * 80);
+
+        return PhaserMath.Between(minGap, maxGap);
+    }
+
+    private getPlatformWidth(options: AddPlatformOptions) {
+        const minWidth = Math.round(
+            options.minWidth ?? 220 - this.difficulty * 50,
+        );
+        const maxWidth = Math.round(
+            options.maxWidth ?? 400 - this.difficulty * 80,
+        );
+
+        return PhaserMath.Between(minWidth, maxWidth);
+    }
+
     private calculatePlatformRows() {
         const canvasHeight = this.scene.cameras.main.height;
-        // 上下保留界面空间，其余高度平均分配给三行平台。
-        const topPlatformY = canvasHeight * 0.28;
-        const bottomPlatformY = canvasHeight * 0.82;
-        this.platformRowGap =
-            (bottomPlatformY - topPlatformY) / (this.platformRowCount - 1);
+        const middlePlatformY = canvasHeight * 0.55;
+
+        // 行距小于普通跳跃高度，保证玩家不依赖二段跳也能向上一层。
+        this.platformRowGap = 100;
         this.platformRows = Array.from(
             { length: this.platformRowCount },
-            (_, index) => topPlatformY + this.platformRowGap * index,
+            (_, index) =>
+                middlePlatformY +
+                this.platformRowGap * (index - (this.platformRowCount - 1) / 2),
         );
     }
 
@@ -161,14 +232,12 @@ export class PlatformManager {
     // 在屏幕右侧补充平台，形成一条会在三行间切换的路线。
     private extendPlatformTrack() {
         while (this.nextPlatformX < this.worldWidth + 400) {
-            // 只切换到当前行或相邻行，避免出现无法跨越的高度差。
-            const minRow = Math.max(0, this.currentPlatformRow - 1);
-            const maxRow = Math.min(
-                this.platformRows.length - 1,
-                this.currentPlatformRow + 1,
-            );
-            this.currentPlatformRow = PhaserMath.Between(minRow, maxRow);
-            this.addPlatform(this.currentPlatformRow);
+            const nextRow = this.getNextPlatformRow();
+            const isMovingUp = nextRow < this.currentPlatformRow;
+
+            // 向上换层的平台不放石头，保留安全的落脚区域。
+            this.addPlatform(nextRow, { allowRock: !isMovingUp });
+            this.currentPlatformRow = nextRow;
         }
     }
 }
