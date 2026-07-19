@@ -65,8 +65,8 @@ export class Game extends Scene {
             (x, platformY) => {
                 return this.rockManager.add(x, platformY);
             },
-            (x, platformY) => {
-                return this.itemManager.add(x, platformY);
+            (x, itemY) => {
+                return this.itemManager.add(x, itemY);
             },
         );
 
@@ -114,6 +114,7 @@ export class Game extends Scene {
     }
 
     private gameOver() {
+        return;
         if (this.gameState !== 'playing') {
             return;
         }

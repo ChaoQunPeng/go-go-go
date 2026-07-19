@@ -10,14 +10,18 @@ interface AddPlatformOptions {
     allowRock?: boolean;
     /** 当前平台是否允许生成道具，普通平台默认允许。 */
     allowItem?: boolean;
+    /** 首个平台的固定起点，用于错开不同行的跳跃路线。 */
+    startX?: number;
     maxWidth?: number;
     minWidth?: number;
 }
 
 export class PlatformManager {
     private platforms: GameObjects.Rectangle[] = [];
-    private nextPlatformX = 0;
-    private currentPlatformY = 360;
+    private platformRows: number[] = [];
+    private platformRowGap = 0;
+    private readonly initialPlatformXByRow = [240, 0, 240];
+    private nextPlatformXByRow: number[] = [];
     private readonly platformHeight = 44;
     private readonly worldWidth = 1024;
 
@@ -25,80 +29,69 @@ export class PlatformManager {
         private scene: Scene,
         private player: Player,
         private onAddRock: (x: number, platformY: number) => void,
-        private onAddItem: (x: number, platformY: number) => void,
-    ) { }
+        private onAddItem: (x: number, itemY: number) => void,
+    ) {}
 
     create() {
+        this.calculatePlatformRows();
         this.seedPlatforms();
     }
 
     update(scrollDistance: number) {
         // 平台移动后，清理离屏平台并补充右侧平台。
         moveObjects(this.platforms, scrollDistance);
+        this.nextPlatformXByRow = this.nextPlatformXByRow.map(
+            (x) => x - scrollDistance,
+        );
         this.removeOffscreenPlatforms();
         this.extendPlatformTrack();
     }
 
-    // 初始化第一批平台，让画面一开始就有路可以显示。
+    // 初始化三行平台，让玩家开局就有上下跳跃路线。
     private seedPlatforms() {
-        // 从屏幕最左侧开始安排第一块平台。
-        this.nextPlatformX = 0;
+        this.nextPlatformXByRow = this.platformRows.map(() => 0);
 
-        // 出生平台不生成石头和道具，避免玩家开局直接碰撞或拾取。
-        this.addPlatform({
-            allowRock: false,
-            allowItem: false,
-            minWidth: 1000,
-            maxWidth: 1000,
-        });
-
-        // 持续生成平台，直到平台总长度超过屏幕右侧一段距离。
-        while (this.nextPlatformX < this.worldWidth + 400) {
-            // 每循环一次，就创建一块新的平台。
-            this.addPlatform();
+        for (
+            let rowIndex = 0;
+            rowIndex < this.platformRows.length;
+            rowIndex++
+        ) {
+            // 中间行第一块是出生平台，不生成石头和道具。
+            this.addPlatform(rowIndex, {
+                allowRock: rowIndex !== 1,
+                allowItem: rowIndex !== 1,
+                startX: this.initialPlatformXByRow[rowIndex],
+            });
         }
+
+        this.extendPlatformTrack();
     }
 
     /**
      * 创建一块新平台，并根据业务选项决定是否生成石头。
      */
-    private addPlatform(options: AddPlatformOptions = {}) {
+    private addPlatform(rowIndex: number, options: AddPlatformOptions = {}) {
         // 普通平台默认允许生成石头，调用方只需声明特殊平台的差异。
         const { allowRock = true, allowItem = true } = options;
 
         // 随机生成平台宽度，让每个平台长短不完全一样。
-        const width = PhaserMath.Between(options.minWidth ?? 150, options.maxWidth ?? 300);
+        const width = PhaserMath.Between(
+            options.minWidth ?? 150,
+            options.maxWidth ?? 300,
+        );
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        const gap = this.nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
+        const nextPlatformX = this.nextPlatformXByRow[rowIndex];
+        const gap = nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
         // 新平台的起点等于“下一块平台位置”加上空隙。
-        const x = this.nextPlatformX + gap;
-
-        /**
-         * 除了第一块平台以外，
-         * 后续平台都会在上一块平台的基础上，
-         * 上下浮动一定距离。
-         */
-        if (this.nextPlatformX !== 0) {
-            // 高度变化范围。
-            const offset = PhaserMath.Between(-40, 40);
-
-            // 更新当前平台高度。
-            this.currentPlatformY += offset;
-
-            // 限制平台不会太高或太低。
-            this.currentPlatformY = PhaserMath.Clamp(
-                this.currentPlatformY,
-                280,
-                420,
-            );
-        }
+        const x = options.startX ?? nextPlatformX + gap;
+        const platformY = this.platformRows[rowIndex];
 
         // 创建一个矩形作为平台；这里没有使用任何图片素材。
         const platform = this.scene.add.rectangle(
             // 矩形的 x 坐标；因为下面设置了左侧为原点，所以这是平台左边缘。
             x,
-            // 矩形的 y 坐标；所有平台都放在同一条水平线上。
-            this.currentPlatformY,
+            // 矩形的 y 坐标；同行平台保持在固定高度。
+            platformY,
             // 矩形宽度；前面随机生成。
             width,
             // 矩形高度；使用固定值。
@@ -121,60 +114,57 @@ export class PlatformManager {
          * 允许生成障碍时，按 80% 概率在平台上生成石头。
          */
         if (allowRock && Math.random() < 0.8) {
-            this.onAddRock(x + width / 2, this.currentPlatformY);
+            this.onAddRock(x + width / 2, platformY);
         }
 
         // 道具独立生成，并悬浮在平台中部，避免与同平台石头重叠。
         if (allowItem && Math.random() < 0.3) {
-            this.onAddItem(x + width / 2, this.currentPlatformY);
+            // 放在相邻平台行的中间，避免道具嵌入上一行平台。
+            const itemY = platformY - this.platformRowGap / 2;
+            this.onAddItem(x + width / 2, itemY);
         }
 
         // 更新下一块平台的起点：当前平台左边缘加当前平台宽度。
-        this.nextPlatformX = x + width;
+        this.nextPlatformXByRow[rowIndex] = x + width;
+    }
+
+    private calculatePlatformRows() {
+        const canvasHeight = this.scene.cameras.main.height;
+        // 上下保留界面空间，其余高度平均分配给三行平台。
+        const topPlatformY = canvasHeight * 0.28;
+        const bottomPlatformY = canvasHeight * 0.82;
+        this.platformRowGap =
+            (bottomPlatformY - topPlatformY) /
+            (this.initialPlatformXByRow.length - 1);
+        this.platformRows = this.initialPlatformXByRow.map(
+            (_, index) => topPlatformY + this.platformRowGap * index,
+        );
     }
 
     // 删除已经完全离开屏幕左侧的平台。
     private removeOffscreenPlatforms() {
-        // 只要数组里还有平台，就检查最左边的那一块。
-        while (this.platforms.length > 0) {
-            // 数组第 0 项就是当前最早生成、也最靠左的平台。
-            const firstPlatform = this.platforms[0];
+        // 多行平台的横向顺序不同，需要逐项清理离屏对象。
+        for (let index = this.platforms.length - 1; index >= 0; index--) {
+            const platform = this.platforms[index];
 
-            // 如果平台右边缘还没有完全离开屏幕，就停止清理。
-            if (firstPlatform.x + firstPlatform.width > -40) {
-                // break 会跳出 while 循环。
-                break;
+            if (platform.x + platform.width <= -40) {
+                platform.destroy();
+                this.platforms.splice(index, 1);
             }
-
-            // 销毁 Phaser 对象，让它从场景里消失。
-            firstPlatform.destroy();
-            // 从数组里移除这块已经销毁的平台。
-            this.platforms.shift();
         }
     }
 
-    // 在屏幕右侧补充新的平台。
+    // 在屏幕右侧为每一行补充新的平台。
     private extendPlatformTrack() {
-        // 取出数组最后一项，也就是当前最靠右的平台。
-        const lastPlatform = this.platforms[this.platforms.length - 1];
-
-        // 如果数组里没有平台，就重新从 x=0 开始生成一块。
-        if (!lastPlatform) {
-            // 重置下一块平台的生成起点。
-            this.nextPlatformX = 0;
-            // 创建一块新平台，避免画面里没有平台。
-            this.addPlatform();
-            // return 表示当前方法到这里结束。
-            return;
-        }
-
-        // 根据最右侧平台的位置，计算下一块平台应该接着从哪里生成。
-        this.nextPlatformX = lastPlatform.x + lastPlatform.width;
-
-        // 如果右侧预留的平台不够多，就继续补平台。
-        while (this.nextPlatformX < this.worldWidth + 400) {
-            // 每循环一次，就在右边追加一块平台。
-            this.addPlatform();
+        for (
+            let rowIndex = 0;
+            rowIndex < this.platformRows.length;
+            rowIndex++
+        ) {
+            // 每行都持续生成到屏幕右侧之外，避免滚动后出现空行。
+            while (this.nextPlatformXByRow[rowIndex] < this.worldWidth + 400) {
+                this.addPlatform(rowIndex);
+            }
         }
     }
 }

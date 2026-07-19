@@ -44,11 +44,11 @@ export class ItemManager {
         this.removeOffscreenItems();
     }
 
-    add(x: number, platformY: number) {
+    add(x: number, itemY: number) {
         // 当前只生成跳跃道具，保留类型配置便于后续扩展。
         const type: ItemType = 'jump';
         const item = this.scene.add
-            .text(x, platformY - 100, itemLabels[type], {
+            .text(x, itemY, itemLabels[type], {
                 fontSize: '28px',
                 color: '#ffffff',
                 backgroundColor: itemColors[type],
