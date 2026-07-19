@@ -1,4 +1,4 @@
-import { GameObjects, Scene } from 'phaser';
+import { GameObjects, Physics, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
 import { moveObjects } from '../world/moveObjects.ts';
 
@@ -9,7 +9,7 @@ export class RockManager {
         private scene: Scene,
         private player: Player,
         private onPlayerDeath: () => void,
-    ) {}
+    ) { }
 
     create() {
         // 统一注册玩家与石头的碰撞检测。
@@ -24,13 +24,14 @@ export class RockManager {
 
     update(scrollDistance: number) {
         moveObjects(this.rocks, scrollDistance);
+        this.updateRockBodies();
         this.removeOffscreenRocks();
     }
 
     add(x: number, platformY: number) {
         const rock = this.scene.add.rectangle(
             x,
-            platformY - 40,
+            platformY - 22,
             40,
             40,
             0x555555,
@@ -38,6 +39,7 @@ export class RockManager {
 
         rock.setOrigin(0, 1);
         this.scene.physics.add.existing(rock, true);
+        this.updateRockBody(rock);
         this.rocks.push(rock);
     }
 
@@ -70,5 +72,24 @@ export class RockManager {
             rock.destroy();
             this.rocks.shift();
         }
+    }
+
+    private updateRockBodies() {
+        for (const rock of this.rocks) {
+            this.updateRockBody(rock);
+        }
+    }
+
+    private updateRockBody(rock: GameObjects.Rectangle) {
+        const body = rock.body as Physics.Arcade.StaticBody;
+        const bodyWidth = rock.width * 0.5;
+        const bodyHeight = rock.height * 0.5;
+        const offsetX = (rock.width - bodyWidth) / 2;
+        const offsetY = (rock.height - bodyHeight) / 2;
+
+        // 静态刚体同步位置后会恢复显示尺寸，这里重新缩小并居中碰撞体。
+        body.offset.set(0, 0);
+        body.setSize(bodyWidth, bodyHeight, false);
+        body.setOffset(offsetX, offsetY);
     }
 }
