@@ -21,6 +21,8 @@ const config: Types.Core.GameConfig = {
                 x: 0,
                 y: 1000,
             },
+            // 提高高速移动时的重叠容差，避免玩家从平台侧边穿入。
+            overlapBias: 16,
             debug: true,
         },
     },
