@@ -32,7 +32,7 @@ export class Player extends Physics.Arcade.Sprite {
         // 碰撞体横向居中、底部对齐，避免缩小后玩家陷入平台。
         body.setSize(bodyWidth, bodyHeight, false);
         body.setOffset((this.width - bodyWidth) / 2, this.height - bodyHeight);
-        // 限制玩家留在 Arcade 世界的四周边界内。
+        // 启用场景配置的世界边界碰撞，底边由场景单独开放。
         body.setCollideWorldBounds(true);
     }
 

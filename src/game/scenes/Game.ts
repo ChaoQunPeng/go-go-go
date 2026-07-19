@@ -52,6 +52,8 @@ export class Game extends Scene {
         this.physics.resume();
         // 重新开始后恢复开发阶段使用的物理调试边框。
         this.physics.world.debugGraphic?.setVisible(true);
+        // 保留左、右和顶部边界，允许玩家从世界底部掉落。
+        this.physics.world.setBoundsCollision(true, true, true, false);
 
         this.player = new Player(this, 100, 300);
         this.scoreManager = new ScoreManager(this);
@@ -102,8 +104,10 @@ export class Game extends Scene {
         this.platformManager.update(scrollDistance);
         this.scoreManager.update(scrollDistance);
 
-        // 玩家掉出画面后，统一进入游戏结束流程。
-        if (this.player.y > 700) {
+        const playerBounds = this.player.getBounds();
+
+        // 玩家整个掉出世界底部后，统一进入游戏结束流程。
+        if (playerBounds.top > this.physics.world.bounds.bottom) {
             this.gameOver();
         }
     }
@@ -121,7 +125,6 @@ export class Game extends Scene {
     }
 
     private gameOver() {
-        return;
         if (this.gameState !== 'playing') {
             return;
         }
