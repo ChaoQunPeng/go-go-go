@@ -4,6 +4,7 @@ import { Player } from '../player/player.ts';
 import { PlatformManager } from '../platform/PlatformManager.ts';
 import { RockManager } from '../rock/RockManager.ts';
 import { ScoreManager } from '../score/ScoreManager.ts';
+import { ItemManager } from '../item/ItemManager.ts';
 
 type GameState = 'waiting' | 'playing' | 'game-over';
 
@@ -17,6 +18,7 @@ export class Game extends Scene {
     private cursors!: Types.Input.Keyboard.CursorKeys;
     private platformManager!: PlatformManager;
     private rockManager!: RockManager;
+    private itemManager!: ItemManager;
     private scoreManager: ScoreManager;
     private gameState: GameState = 'waiting';
 
@@ -55,6 +57,7 @@ export class Game extends Scene {
         this.rockManager = new RockManager(this, this.player, () => {
             this.gameOver();
         });
+        this.itemManager = new ItemManager(this, this.player);
         this.scoreManager = new ScoreManager(this);
         this.platformManager = new PlatformManager(
             this,
@@ -62,10 +65,14 @@ export class Game extends Scene {
             (x, platformY) => {
                 return this.rockManager.add(x, platformY);
             },
+            (x, platformY) => {
+                return this.itemManager.add(x, platformY);
+            },
         );
 
         this.platformManager.create();
         this.rockManager.create();
+        this.itemManager.create();
         this.scoreManager.create();
     }
 
@@ -77,8 +84,9 @@ export class Game extends Scene {
         // delta 是毫秒，统一换算成本帧滚动距离。
         const scrollDistance = this.worldSpeed * (delta / 1000);
 
-        // 先更新已有石头，避免新平台生成的石头在出生帧立即移动。
+        // 先更新已有石头和道具，避免新对象在出生帧立即移动。
         this.rockManager.update(scrollDistance);
+        this.itemManager.update(scrollDistance);
         this.platformManager.update(scrollDistance);
         this.scoreManager.update(scrollDistance);
         this.player.update(this.cursors);

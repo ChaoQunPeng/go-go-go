@@ -8,6 +8,8 @@ import { moveObjects } from '../world/moveObjects.ts';
 interface AddPlatformOptions {
     /** 当前平台是否允许生成石头，普通平台默认允许。 */
     allowRock?: boolean;
+    /** 当前平台是否允许生成道具，普通平台默认允许。 */
+    allowItem?: boolean;
     maxWidth?: number;
     minWidth?: number;
 }
@@ -23,6 +25,7 @@ export class PlatformManager {
         private scene: Scene,
         private player: Player,
         private onAddRock: (x: number, platformY: number) => void,
+        private onAddItem: (x: number, platformY: number) => void,
     ) { }
 
     create() {
@@ -41,8 +44,13 @@ export class PlatformManager {
         // 从屏幕最左侧开始安排第一块平台。
         this.nextPlatformX = 0;
 
-        // 出生平台禁止生成石头，避免玩家开局直接碰撞障碍。
-        this.addPlatform({ allowRock: false, minWidth: 1000, maxWidth: 1000 });
+        // 出生平台不生成石头和道具，避免玩家开局直接碰撞或拾取。
+        this.addPlatform({
+            allowRock: false,
+            allowItem: false,
+            minWidth: 1000,
+            maxWidth: 1000,
+        });
 
         // 持续生成平台，直到平台总长度超过屏幕右侧一段距离。
         while (this.nextPlatformX < this.worldWidth + 400) {
@@ -56,7 +64,7 @@ export class PlatformManager {
      */
     private addPlatform(options: AddPlatformOptions = {}) {
         // 普通平台默认允许生成石头，调用方只需声明特殊平台的差异。
-        const { allowRock = true } = options;
+        const { allowRock = true, allowItem = true } = options;
 
         // 随机生成平台宽度，让每个平台长短不完全一样。
         const width = PhaserMath.Between(options.minWidth ?? 150, options.maxWidth ?? 300);
@@ -114,6 +122,11 @@ export class PlatformManager {
          */
         if (allowRock && Math.random() < 0.8) {
             this.onAddRock(x + width / 2, this.currentPlatformY);
+        }
+
+        // 道具独立生成，并悬浮在平台中部，避免与同平台石头重叠。
+        if (allowItem && Math.random() < 0.3) {
+            this.onAddItem(x + width / 2, this.currentPlatformY);
         }
 
         // 更新下一块平台的起点：当前平台左边缘加当前平台宽度。

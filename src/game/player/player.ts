@@ -8,7 +8,7 @@ export class Player extends Physics.Arcade.Sprite {
 
     // 跳跃相关
     private readonly jumpSpeed = 500;
-    private readonly maxJumpCount = 2;
+    private maxJumpCount = 2;
     private remainingJumpCount = this.maxJumpCount;
     private hasLeftGround = false;
 
@@ -16,6 +16,8 @@ export class Player extends Physics.Arcade.Sprite {
     private readonly dashDownSpeed = 800;
     private readonly dashDistance = 200;
     private readonly dashDuration = 150;
+    private maxDashCount = 1;
+    private remainingDashCount = this.maxDashCount;
     private dashingDown = false;
     private dashEndTime = 0;
 
@@ -41,12 +43,29 @@ export class Player extends Physics.Arcade.Sprite {
     private get dashSpeed() {
         return this.dashDistance / (this.dashDuration / 1000);
     }
+
+    private get canDash() {
+        return this.remainingDashCount > 0;
+    }
+
     public get isDashing() {
         return this.sceneRef.time.now < this.dashEndTime;
     }
 
     public get isDashingDown() {
         return this.dashingDown;
+    }
+
+    public increaseMaxJumpCount() {
+        // 本局永久增加上限，并立即补充一次当前可用跳跃。
+        this.maxJumpCount++;
+        this.remainingJumpCount++;
+    }
+
+    public increaseMaxDashCount() {
+        // 本局永久增加上限，并立即补充一次当前可用冲刺。
+        this.maxDashCount++;
+        this.remainingDashCount++;
     }
 
     update(cursors: Types.Input.Keyboard.CursorKeys) {
@@ -108,8 +127,13 @@ export class Player extends Physics.Arcade.Sprite {
         const body = this.body as Physics.Arcade.Body;
 
         // 开始冲刺
-        if (Input.Keyboard.JustDown(cursors.space)) {
+        if (
+            Input.Keyboard.JustDown(cursors.space) &&
+            this.canDash &&
+            !this.isDashing
+        ) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
+            this.remainingDashCount--;
         }
 
         // 冲刺期间保持速度
@@ -141,6 +165,7 @@ export class Player extends Physics.Arcade.Sprite {
         // 玩家真正落地
         if (isGrounded && this.hasLeftGround) {
             this.remainingJumpCount = this.maxJumpCount;
+            this.remainingDashCount = this.maxDashCount;
 
             this.hasLeftGround = false;
         }
