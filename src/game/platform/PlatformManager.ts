@@ -8,6 +8,8 @@ import { moveObjects } from '../world/moveObjects.ts';
 interface AddPlatformOptions {
     /** 当前平台是否允许生成石头，普通平台默认允许。 */
     allowRock?: boolean;
+    maxWidth?: number;
+    minWidth?: number;
 }
 
 export class PlatformManager {
@@ -21,7 +23,7 @@ export class PlatformManager {
         private scene: Scene,
         private player: Player,
         private onAddRock: (x: number, platformY: number) => void,
-    ) {}
+    ) { }
 
     create() {
         this.seedPlatforms();
@@ -40,7 +42,7 @@ export class PlatformManager {
         this.nextPlatformX = 0;
 
         // 出生平台禁止生成石头，避免玩家开局直接碰撞障碍。
-        this.addPlatform({ allowRock: false });
+        this.addPlatform({ allowRock: false, minWidth: 1000, maxWidth: 1000 });
 
         // 持续生成平台，直到平台总长度超过屏幕右侧一段距离。
         while (this.nextPlatformX < this.worldWidth + 400) {
@@ -57,7 +59,7 @@ export class PlatformManager {
         const { allowRock = true } = options;
 
         // 随机生成平台宽度，让每个平台长短不完全一样。
-        const width = PhaserMath.Between(150, 300);
+        const width = PhaserMath.Between(options.minWidth ?? 150, options.maxWidth ?? 300);
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
         const gap = this.nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
         // 新平台的起点等于“下一块平台位置”加上空隙。
