@@ -81,15 +81,19 @@ export class Game extends Scene {
             return;
         }
 
-        // delta 是毫秒，统一换算成本帧滚动距离。
-        const scrollDistance = this.worldSpeed * (delta / 1000);
+        // 先读取本帧输入，确保世界速度立即跟随玩家朝向变化。
+        this.player.update(this.cursors);
+
+        // 玩家朝右时，世界移动距离变为原来的两倍。
+        const speedMultiplier = 1;
+        const scrollDistance =
+            this.worldSpeed * speedMultiplier * (delta / 1000);
 
         // 先更新已有石头和道具，避免新对象在出生帧立即移动。
         this.rockManager.update(scrollDistance);
         this.itemManager.update(scrollDistance);
         this.platformManager.update(scrollDistance);
         this.scoreManager.update(scrollDistance);
-        this.player.update(this.cursors);
 
         // 玩家掉出画面后，统一进入游戏结束流程。
         if (this.player.y > 700) {

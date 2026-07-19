@@ -50,6 +50,11 @@ export class Player extends Physics.Arcade.Sprite {
         return this.dashingDown;
     }
 
+    public get isFacingRight() {
+        // 根据玩家最后一次移动方向判断当前是否朝右。
+        return this.facingDirection === 1;
+    }
+
     public increaseMaxJumpCount() {
         // 本局永久增加上限，并立即补充一次当前可用跳跃。
         this.maxJumpCount++;
