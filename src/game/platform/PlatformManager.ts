@@ -1,4 +1,4 @@
-import { GameObjects, Math as PhaserMath, Physics, Scene } from 'phaser';
+import { GameObjects, Math as PhaserMath, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
 import { moveObjects } from '../world/moveObjects.ts';
 
@@ -124,22 +124,8 @@ export class PlatformManager {
         // 给平台加一条边框，让平台更容易看清楚。
         platform.setStrokeStyle(3, 0x0f766e);
         this.scene.physics.add.existing(platform, true);
-        this.scene.physics.add.collider(
-            this.player,
-            platform,
-            undefined,
-            () => {
-                const playerBody = this.player.body as Physics.Arcade.Body;
-                const platformBody = platform.body as Physics.Arcade.StaticBody;
-                const previousBottom = playerBody.prev.y + playerBody.height;
-
-                // 上升时穿过平台，只在从平台上方下落时处理碰撞。
-                return (
-                    playerBody.velocity.y >= 0 &&
-                    previousBottom <= platformBody.top
-                );
-            },
-        );
+        // 平台使用实体碰撞，玩家无法从底部或侧面穿过。
+        this.scene.physics.add.collider(this.player, platform);
 
         // 把新平台保存到数组里，后面滚动和删除都要用到它。
         this.platforms.push(platform);
