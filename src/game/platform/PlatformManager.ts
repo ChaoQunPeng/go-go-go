@@ -10,8 +10,6 @@ interface AddPlatformOptions {
     allowRock?: boolean;
     /** 当前平台是否允许生成道具，普通平台默认允许。 */
     allowItem?: boolean;
-    /** 首个平台的固定起点，用于错开不同行的跳跃路线。 */
-    startX?: number;
     maxWidth?: number;
     minWidth?: number;
 }
@@ -28,8 +26,9 @@ export class PlatformManager {
     private platforms: GameObjects.Rectangle[] = [];
     private platformRows: number[] = [];
     private platformRowGap = 0;
-    private readonly initialPlatformXByRow = [240, 0, 240];
-    private nextPlatformXByRow: number[] = [];
+    private readonly platformRowCount = 3;
+    private nextPlatformX = 0;
+    private currentPlatformRow = 1;
     private readonly platformHeight = 44;
     private readonly worldWidth = 1024;
     private scene: Scene;
@@ -52,29 +51,23 @@ export class PlatformManager {
     update(scrollDistance: number) {
         // 平台移动后，清理离屏平台并补充右侧平台。
         moveObjects(this.platforms, scrollDistance);
-        this.nextPlatformXByRow = this.nextPlatformXByRow.map(
-            (x) => x - scrollDistance,
-        );
+        this.nextPlatformX -= scrollDistance;
         this.removeOffscreenPlatforms();
         this.extendPlatformTrack();
     }
 
-    // 初始化三行平台，让玩家开局就有上下跳跃路线。
+    // 先创建中间行的长出生平台，再向右延伸一条上下切换的路线。
     private seedPlatforms() {
-        this.nextPlatformXByRow = this.platformRows.map(() => 0);
+        this.nextPlatformX = 0;
+        this.currentPlatformRow = 1;
 
-        for (
-            let rowIndex = 0;
-            rowIndex < this.platformRows.length;
-            rowIndex++
-        ) {
-            // 中间行第一块是出生平台，不生成石头和道具。
-            this.addPlatform(rowIndex, {
-                allowRock: rowIndex !== 1,
-                allowItem: rowIndex !== 1,
-                startX: this.initialPlatformXByRow[rowIndex],
-            });
-        }
+        // 出生平台不生成石头和道具，给玩家留出开局准备时间。
+        this.addPlatform(this.currentPlatformRow, {
+            allowRock: false,
+            allowItem: false,
+            minWidth: 1000,
+            maxWidth: 1000,
+        });
 
         this.extendPlatformTrack();
     }
@@ -92,10 +85,9 @@ export class PlatformManager {
             options.maxWidth ?? 300,
         );
         // 第一块平台不留空隙，后面的平台随机留出一段空隙。
-        const nextPlatformX = this.nextPlatformXByRow[rowIndex];
-        const gap = nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
+        const gap = this.nextPlatformX === 0 ? 0 : PhaserMath.Between(90, 180);
         // 新平台的起点等于“下一块平台位置”加上空隙。
-        const x = options.startX ?? nextPlatformX + gap;
+        const x = this.nextPlatformX + gap;
         const platformY = this.platformRows[rowIndex];
 
         // 创建一个矩形作为平台；这里没有使用任何图片素材。
@@ -137,7 +129,7 @@ export class PlatformManager {
         }
 
         // 更新下一块平台的起点：当前平台左边缘加当前平台宽度。
-        this.nextPlatformXByRow[rowIndex] = x + width;
+        this.nextPlatformX = x + width;
     }
 
     private calculatePlatformRows() {
@@ -146,16 +138,16 @@ export class PlatformManager {
         const topPlatformY = canvasHeight * 0.28;
         const bottomPlatformY = canvasHeight * 0.82;
         this.platformRowGap =
-            (bottomPlatformY - topPlatformY) /
-            (this.initialPlatformXByRow.length - 1);
-        this.platformRows = this.initialPlatformXByRow.map(
+            (bottomPlatformY - topPlatformY) / (this.platformRowCount - 1);
+        this.platformRows = Array.from(
+            { length: this.platformRowCount },
             (_, index) => topPlatformY + this.platformRowGap * index,
         );
     }
 
     // 删除已经完全离开屏幕左侧的平台。
     private removeOffscreenPlatforms() {
-        // 多行平台的横向顺序不同，需要逐项清理离屏对象。
+        // 倒序遍历，避免删除元素后影响尚未检查的数组索引。
         for (let index = this.platforms.length - 1; index >= 0; index--) {
             const platform = this.platforms[index];
 
@@ -166,17 +158,17 @@ export class PlatformManager {
         }
     }
 
-    // 在屏幕右侧为每一行补充新的平台。
+    // 在屏幕右侧补充平台，形成一条会在三行间切换的路线。
     private extendPlatformTrack() {
-        for (
-            let rowIndex = 0;
-            rowIndex < this.platformRows.length;
-            rowIndex++
-        ) {
-            // 每行都持续生成到屏幕右侧之外，避免滚动后出现空行。
-            while (this.nextPlatformXByRow[rowIndex] < this.worldWidth + 400) {
-                this.addPlatform(rowIndex);
-            }
+        while (this.nextPlatformX < this.worldWidth + 400) {
+            // 只切换到当前行或相邻行，避免出现无法跨越的高度差。
+            const minRow = Math.max(0, this.currentPlatformRow - 1);
+            const maxRow = Math.min(
+                this.platformRows.length - 1,
+                this.currentPlatformRow + 1,
+            );
+            this.currentPlatformRow = PhaserMath.Between(minRow, maxRow);
+            this.addPlatform(this.currentPlatformRow);
         }
     }
 }
