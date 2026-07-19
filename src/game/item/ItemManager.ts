@@ -19,7 +19,7 @@ export class ItemManager {
     constructor(
         private scene: Scene,
         private player: Player,
-    ) {}
+    ) { }
 
     create() {
         // 统一注册玩家与道具的拾取检测。
@@ -45,8 +45,8 @@ export class ItemManager {
     }
 
     add(x: number, platformY: number) {
-        // 两种道具使用相同概率生成。
-        const type: ItemType = Math.random() < 0.5 ? 'jump' : 'dash';
+        // 当前只生成跳跃道具，保留类型配置便于后续扩展。
+        const type: ItemType = 'jump';
         const item = this.scene.add
             .text(x, platformY - 100, itemLabels[type], {
                 fontSize: '28px',
@@ -65,14 +65,12 @@ export class ItemManager {
     }
 
     private collectItem(_player: unknown, item: unknown) {
-        // Phaser 回调类型较宽，道具类型从文本对象的数据中读取。
+        // Phaser 回调类型较宽，这里只把道具当成文字对象处理。
         const itemObject = item as GameObjects.Text;
         const type = itemObject.getData('itemType') as ItemType;
 
         if (type === 'jump') {
             this.player.increaseMaxJumpCount();
-        } else {
-            this.player.increaseMaxDashCount();
         }
 
         itemObject.destroy();

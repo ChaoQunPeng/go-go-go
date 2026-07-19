@@ -16,8 +16,6 @@ export class Player extends Physics.Arcade.Sprite {
     private readonly dashDownSpeed = 800;
     private readonly dashDistance = 200;
     private readonly dashDuration = 150;
-    private maxDashCount = 1;
-    private remainingDashCount = this.maxDashCount;
     private dashingDown = false;
     private dashEndTime = 0;
 
@@ -44,10 +42,6 @@ export class Player extends Physics.Arcade.Sprite {
         return this.dashDistance / (this.dashDuration / 1000);
     }
 
-    private get canDash() {
-        return this.remainingDashCount > 0;
-    }
-
     public get isDashing() {
         return this.sceneRef.time.now < this.dashEndTime;
     }
@@ -60,12 +54,6 @@ export class Player extends Physics.Arcade.Sprite {
         // 本局永久增加上限，并立即补充一次当前可用跳跃。
         this.maxJumpCount++;
         this.remainingJumpCount++;
-    }
-
-    public increaseMaxDashCount() {
-        // 本局永久增加上限，并立即补充一次当前可用冲刺。
-        this.maxDashCount++;
-        this.remainingDashCount++;
     }
 
     update(cursors: Types.Input.Keyboard.CursorKeys) {
@@ -95,7 +83,7 @@ export class Player extends Physics.Arcade.Sprite {
         this.handleDownDash(cursors, isGrounded);
 
         // 冲刺
-        this.handleDash(cursors, isGrounded);
+        this.handleDash(cursors);
     }
 
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
@@ -123,21 +111,12 @@ export class Player extends Physics.Arcade.Sprite {
         }
     }
 
-    private handleDash(
-        cursors: Types.Input.Keyboard.CursorKeys,
-        isGrounded: boolean,
-    ) {
+    private handleDash(cursors: Types.Input.Keyboard.CursorKeys) {
         const body = this.body as Physics.Arcade.Body;
 
-        // 开始冲刺
-        if (
-            Input.Keyboard.JustDown(cursors.space) &&
-            !isGrounded &&
-            this.canDash &&
-            !this.isDashing
-        ) {
+        // 地面和空中都可以无限次冲刺。
+        if (Input.Keyboard.JustDown(cursors.space)) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
-            this.remainingDashCount--;
         }
 
         // 冲刺期间保持速度
@@ -169,7 +148,6 @@ export class Player extends Physics.Arcade.Sprite {
         // 玩家真正落地
         if (isGrounded && this.hasLeftGround) {
             this.remainingJumpCount = this.maxJumpCount;
-            this.remainingDashCount = this.maxDashCount;
 
             this.hasLeftGround = false;
         }
