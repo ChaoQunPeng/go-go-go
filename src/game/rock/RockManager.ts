@@ -9,6 +9,7 @@ export class RockManager {
         private scene: Scene,
         private player: Player,
         private onPlayerDeath: () => void,
+        private onRockDestroyed: () => void,
     ) { }
 
     create() {
@@ -54,6 +55,8 @@ export class RockManager {
 
             if (index !== -1) {
                 this.rocks.splice(index, 1);
+                // 只在石头实际从列表移除时结算一次击碎奖励。
+                this.onRockDestroyed();
             }
         } else {
             // 只上报死亡结果，由场景统一处理游戏结束流程。

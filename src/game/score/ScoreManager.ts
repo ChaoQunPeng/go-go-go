@@ -30,6 +30,12 @@ export class ScoreManager {
         return Math.floor(this.score);
     }
 
+    public addScore(points: number) {
+        // 击碎石头等事件加分后立即刷新分数显示。
+        this.score += points;
+        this.renderScore();
+    }
+
     private renderScore() {
         this.scoreText.setText(this.getScore().toString());
     }

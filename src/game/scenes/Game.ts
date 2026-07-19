@@ -54,11 +54,18 @@ export class Game extends Scene {
         this.physics.world.debugGraphic?.setVisible(true);
 
         this.player = new Player(this, 100, 300);
-        this.rockManager = new RockManager(this, this.player, () => {
-            this.gameOver();
-        });
-        this.itemManager = new ItemManager(this, this.player);
         this.scoreManager = new ScoreManager(this);
+        this.itemManager = new ItemManager(this, this.player);
+        this.rockManager = new RockManager(
+            this,
+            this.player,
+            () => {
+                this.gameOver();
+            },
+            () => {
+                this.scoreManager.addScore(100);
+            },
+        );
         this.platformManager = new PlatformManager(
             this,
             this.player,
