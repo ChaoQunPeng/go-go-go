@@ -111,16 +111,28 @@ export class Game extends Scene {
         // 调试图层层级最高，需要单独隐藏才能展示完整结算画面。
         this.physics.world.debugGraphic?.setVisible(false);
 
-        // 使用不透明遮罩完全覆盖底层游戏画面。
+        // 只在画面中央展示结算弹框，保留玩家死亡时的游戏场景。
+        this.add
+            .rectangle(
+                this.cameras.main.centerX + 8,
+                this.cameras.main.centerY + 8,
+                480,
+                300,
+                0x000000,
+                0.2,
+            )
+            .setDepth(2000);
+
         this.add
             .rectangle(
                 this.cameras.main.centerX,
                 this.cameras.main.centerY,
-                this.scale.width,
-                this.scale.height,
+                480,
+                300,
                 0xffffff,
-                1,
+                0.96,
             )
+            .setStrokeStyle(3, 0x0f766e)
             .setDepth(2000);
 
         this.add
