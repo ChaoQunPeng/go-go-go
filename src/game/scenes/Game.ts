@@ -56,26 +56,26 @@ export class Game extends Scene {
         this.player = new Player(this, 100, 300);
         this.scoreManager = new ScoreManager(this);
         this.itemManager = new ItemManager(this, this.player);
-        this.rockManager = new RockManager(
-            this,
-            this.player,
-            () => {
+        this.rockManager = new RockManager({
+            scene: this,
+            player: this.player,
+            onPlayerDeath: () => {
                 this.gameOver();
             },
-            () => {
+            onRockDestroyed: () => {
                 this.scoreManager.addScore(100);
             },
-        );
-        this.platformManager = new PlatformManager(
-            this,
-            this.player,
-            (x, platformY) => {
-                return this.rockManager.add(x, platformY);
+        });
+        this.platformManager = new PlatformManager({
+            scene: this,
+            player: this.player,
+            onAddRock: (x, platformY) => {
+                this.rockManager.add(x, platformY);
             },
-            (x, itemY) => {
-                return this.itemManager.add(x, itemY);
+            onAddItem: (x, itemY) => {
+                this.itemManager.add(x, itemY);
             },
-        );
+        });
 
         this.platformManager.create();
         this.rockManager.create();

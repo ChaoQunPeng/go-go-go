@@ -16,6 +16,14 @@ interface AddPlatformOptions {
     minWidth?: number;
 }
 
+// 使用具名参数明确平台管理器需要的依赖和对象创建回调。
+interface PlatformManagerOptions {
+    scene: Scene;
+    player: Player;
+    onAddRock: (x: number, platformY: number) => void;
+    onAddItem: (x: number, itemY: number) => void;
+}
+
 export class PlatformManager {
     private platforms: GameObjects.Rectangle[] = [];
     private platformRows: number[] = [];
@@ -24,13 +32,17 @@ export class PlatformManager {
     private nextPlatformXByRow: number[] = [];
     private readonly platformHeight = 44;
     private readonly worldWidth = 1024;
+    private scene: Scene;
+    private player: Player;
+    private onAddRock: (x: number, platformY: number) => void;
+    private onAddItem: (x: number, itemY: number) => void;
 
-    constructor(
-        private scene: Scene,
-        private player: Player,
-        private onAddRock: (x: number, platformY: number) => void,
-        private onAddItem: (x: number, itemY: number) => void,
-    ) {}
+    constructor(options: PlatformManagerOptions) {
+        this.scene = options.scene;
+        this.player = options.player;
+        this.onAddRock = options.onAddRock;
+        this.onAddItem = options.onAddItem;
+    }
 
     create() {
         this.calculatePlatformRows();

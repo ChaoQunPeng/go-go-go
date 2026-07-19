@@ -2,15 +2,27 @@ import { GameObjects, Physics, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
 import { moveObjects } from '../world/moveObjects.ts';
 
+// 使用具名参数明确场景依赖和碰撞后的业务回调。
+interface RockManagerOptions {
+    scene: Scene;
+    player: Player;
+    onPlayerDeath: () => void;
+    onRockDestroyed: () => void;
+}
+
 export class RockManager {
     private rocks: GameObjects.Rectangle[] = [];
+    private scene: Scene;
+    private player: Player;
+    private onPlayerDeath: () => void;
+    private onRockDestroyed: () => void;
 
-    constructor(
-        private scene: Scene,
-        private player: Player,
-        private onPlayerDeath: () => void,
-        private onRockDestroyed: () => void,
-    ) { }
+    constructor(options: RockManagerOptions) {
+        this.scene = options.scene;
+        this.player = options.player;
+        this.onPlayerDeath = options.onPlayerDeath;
+        this.onRockDestroyed = options.onRockDestroyed;
+    }
 
     create() {
         // 统一注册玩家与石头的碰撞检测。
