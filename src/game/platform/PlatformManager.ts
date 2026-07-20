@@ -34,7 +34,7 @@ export class PlatformManager {
     // 记录上一块平台的换层方向，避免相邻平台连续同向换层。
     private lastRowDirection = 0;
     // 难度预留为 0~1，当前从最低难度开始生成。
-    private difficulty = 0;
+    private difficulty = 0.8;
     private readonly platformHeight = 44;
     private readonly worldWidth = 1024;
     private scene: Scene;

@@ -8,6 +8,8 @@ export class Player extends GameObjects.Text {
 
     // 跳跃相关
     private readonly jumpSpeed = 500;
+    private readonly riseGravity = 0;
+    private readonly fallGravity = 1000;
     private maxJumpCount = 2;
     private remainingJumpCount = this.maxJumpCount;
     private hasLeftGround = false;
@@ -24,6 +26,7 @@ export class Player extends GameObjects.Text {
         super(scene, x, y, '🏃', {
             fontSize: '48px',
         });
+        this.setFlipX(true);
         this.sceneRef = scene;
         this.setOrigin(0.5);
         scene.add.existing(this);
@@ -95,6 +98,11 @@ export class Player extends GameObjects.Text {
 
         // 冲刺
         this.handleDash(cursors);
+
+        // Body 重力会与全局重力叠加：上升不追加，下降时增强重力。
+        body.setGravityY(
+            body.velocity.y > 0 ? this.fallGravity : this.riseGravity,
+        );
     }
 
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
