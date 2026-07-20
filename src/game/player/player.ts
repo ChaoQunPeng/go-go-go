@@ -3,7 +3,7 @@ import { GameObjects, Input, Physics, Scene, Types } from 'phaser';
 export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
 
-    private readonly playerSpeed = 500;
+    private readonly playerSpeed = 300;
     private facingDirection = 1;
 
     // 跳跃相关
