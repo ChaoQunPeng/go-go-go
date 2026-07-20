@@ -3,22 +3,37 @@ import { GameObjects, Input, Physics, Scene, Types } from 'phaser';
 export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
 
-    private readonly playerSpeed = 300;
+    // 地面左右移动速度，数值越大移动越快。
+    private readonly groundMoveSpeed = 400;
+    // 空中左右移动速度，数值越小跳跃轨迹越收敛。
+    private readonly airMoveSpeed = 250;
+    // 当前朝向：1 为右，-1 为左，无需手动调整。
     private facingDirection = 1;
 
     // 跳跃相关
+    // 起跳速度，数值越大起跳越有力、跳得越高。
     private readonly jumpSpeed = 600;
-    private readonly riseGravity = 440;
+    // 上升阶段重力，数值越大上升时间越短。
+    private readonly riseGravity = 500;
+    // 下落阶段重力，数值越大下落越快。
     private readonly fallGravity = 1500;
+    // 最大连续跳跃次数。
     private maxJumpCount = 2;
+    // 当前剩余跳跃次数，运行时自动更新。
     private remainingJumpCount = this.maxJumpCount;
+    // 是否已经离开地面，用于判断真正落地。
     private hasLeftGround = false;
 
     // 冲撞/下撞
+    // 下撞速度，数值越大向下冲得越快。
     private readonly dashDownSpeed = 800;
-    private readonly dashDistance = 200;
-    private readonly dashDuration = 150;
+    // 横向冲刺距离，数值越大单次冲刺越远。
+    private readonly dashDistance = 100;
+    // 横向冲刺持续时间，单位为毫秒。
+    private readonly dashDuration = 100;
+    // 当前是否正在下撞，运行时自动更新。
     private dashingDown = false;
+    // 横向冲刺结束时间，运行时自动计算。
     private dashEndTime = 0;
 
     constructor(scene: Scene, x: number, y: number) {
@@ -107,20 +122,24 @@ export class Player extends GameObjects.Text {
 
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
         const body = this.body as Physics.Arcade.Body;
+        // 离地后降低水平速度，落地时恢复地面速度。
+        const moveSpeed = body.blocked.down
+            ? this.groundMoveSpeed
+            : this.airMoveSpeed;
 
         // 左
         if (cursors.left.isDown) {
             this.facingDirection = -1;
             // 左移时翻转人物 emoji，使显示方向与移动方向一致。
             this.setFlipX(false);
-            body.setVelocityX(-this.playerSpeed);
+            body.setVelocityX(-moveSpeed);
         }
 
         // 右
         if (cursors.right.isDown) {
             this.facingDirection = 1;
             this.setFlipX(true);
-            body.setVelocityX(this.playerSpeed);
+            body.setVelocityX(moveSpeed);
         }
     }
 
