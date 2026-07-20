@@ -1,6 +1,6 @@
-import { Input, Physics, Scene, Types } from 'phaser';
+import { GameObjects, Input, Physics, Scene, Types } from 'phaser';
 
-export class Player extends Physics.Arcade.Sprite {
+export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
 
     private readonly playerSpeed = 500;
@@ -20,8 +20,12 @@ export class Player extends Physics.Arcade.Sprite {
     private dashEndTime = 0;
 
     constructor(scene: Scene, x: number, y: number) {
-        super(scene, x, y, 'player');
+        // 使用 emoji 展示人物，避免依赖外部图片纹理。
+        super(scene, x, y, '🏃', {
+            fontSize: '48px',
+        });
         this.sceneRef = scene;
+        this.setOrigin(0.5);
         scene.add.existing(this);
         scene.physics.add.existing(this);
 
@@ -99,12 +103,15 @@ export class Player extends Physics.Arcade.Sprite {
         // 左
         if (cursors.left.isDown) {
             this.facingDirection = -1;
+            // 左移时翻转人物 emoji，使显示方向与移动方向一致。
+            this.setFlipX(false);
             body.setVelocityX(-this.playerSpeed);
         }
 
         // 右
         if (cursors.right.isDown) {
             this.facingDirection = 1;
+            this.setFlipX(true);
             body.setVelocityX(this.playerSpeed);
         }
     }
