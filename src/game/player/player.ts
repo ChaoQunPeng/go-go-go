@@ -7,9 +7,9 @@ export class Player extends GameObjects.Text {
     private facingDirection = 1;
 
     // 跳跃相关
-    private readonly jumpSpeed = 500;
-    private readonly riseGravity = 0;
-    private readonly fallGravity = 1000;
+    private readonly jumpSpeed = 600;
+    private readonly riseGravity = 440;
+    private readonly fallGravity = 1500;
     private maxJumpCount = 2;
     private remainingJumpCount = this.maxJumpCount;
     private hasLeftGround = false;
