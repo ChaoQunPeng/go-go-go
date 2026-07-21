@@ -3,12 +3,15 @@ import { GameObjects, Input, Physics, Scene, Types } from 'phaser';
 export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
 
-    // 地面左右移动速度，数值越大移动越快。
-    private readonly groundMoveSpeed = 400;
-    // 空中左右移动速度，数值越小跳跃轨迹越收敛。
-    private readonly airMoveSpeed = 250;
-    // 当前朝向：1 为右，-1 为左，无需手动调整。
-    private facingDirection = 1;
+    // 地面按左时略微放慢世界滚动，用于让玩家相对世界向后调整节奏。
+    private readonly groundSlowWorldSpeedMultiplier = 0.9;
+    // 地面按右时略微加快世界滚动，用于让玩家相对世界向前调整节奏。
+    private readonly groundFastWorldSpeedMultiplier = 1.1;
+    // 空中左右只允许更小幅度影响世界速度，避免明显改变跳跃落点和轨迹。
+    private readonly airSlowWorldSpeedMultiplier = 0.95;
+    private readonly airFastWorldSpeedMultiplier = 1.05;
+    // 普通左右输入产生的世界速度倍率，默认不改变跑酷节奏。
+    private normalWorldSpeedMultiplier = 1;
 
     // 跳跃相关
     // 起跳速度，数值越大起跳越有力、跳得越高。
@@ -27,10 +30,12 @@ export class Player extends GameObjects.Text {
     // 冲撞/下撞
     // 下撞速度，数值越大向下冲得越快。
     private readonly dashDownSpeed = 800;
-    // 横向冲刺距离，数值越大单次冲刺越远。
-    private readonly dashDistance = 100;
+    // Dash 固定推进距离，业务上用于快速赶路、穿过危险区和撞碎障碍。
+    private readonly dashDistance = 150;
+    // 场景基础世界滚动速度，Dash 需要用它把固定距离换算成世界速度倍率。
+    private readonly baseWorldSpeed = 300;
     // 横向冲刺持续时间，单位为毫秒。
-    private readonly dashDuration = 100;
+    private readonly dashDuration = 180;
     // 当前是否正在下撞，运行时自动更新。
     private dashingDown = false;
     // 横向冲刺结束时间，运行时自动计算。
@@ -62,12 +67,15 @@ export class Player extends GameObjects.Text {
         return this.remainingJumpCount > 0;
     }
 
-    private get dashSpeed() {
-        return this.dashDistance / (this.dashDuration / 1000);
-    }
-
     public get isDashing() {
         return this.sceneRef.time.now < this.dashEndTime;
+    }
+
+    public get worldSpeedMultiplier() {
+        // Dash 是独立技能，冲刺期间不叠加普通左右键的轻微速度修正。
+        return this.isDashing
+            ? this.getDashWorldSpeedMultiplier()
+            : this.normalWorldSpeedMultiplier;
     }
 
     public get isDashingDown() {
@@ -75,8 +83,8 @@ export class Player extends GameObjects.Text {
     }
 
     public get isFacingRight() {
-        // 根据玩家最后一次移动方向判断当前是否朝右。
-        return this.facingDirection === 1;
+        // Endless Runner 中玩家始终朝向前方，左右键只调整世界相对速度。
+        return true;
     }
 
     public increaseMaxJumpCount() {
@@ -122,25 +130,31 @@ export class Player extends GameObjects.Text {
 
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
         const body = this.body as Physics.Arcade.Body;
-        // 离地后降低水平速度，落地时恢复地面速度。
-        const moveSpeed = body.blocked.down
-            ? this.groundMoveSpeed
-            : this.airMoveSpeed;
 
-        // 左
-        if (cursors.left.isDown) {
-            this.facingDirection = -1;
-            // 左移时翻转人物 emoji，使显示方向与移动方向一致。
-            this.setFlipX(false);
-            body.setVelocityX(-moveSpeed);
+        if (this.isDashing) {
+            // Dash 是独立技能，冲刺期间由 Dash 接管横向位移和世界速度倍率。
+            this.normalWorldSpeedMultiplier = 1;
+            return;
         }
 
-        // 右
-        if (cursors.right.isDown) {
-            this.facingDirection = 1;
-            this.setFlipX(true);
-            body.setVelocityX(moveSpeed);
+        if (cursors.left.isDown && !cursors.right.isDown) {
+            // 左键表示相对世界轻微减速，不给玩家本体水平速度，也不改变朝向。
+            this.normalWorldSpeedMultiplier = body.blocked.down
+                ? this.groundSlowWorldSpeedMultiplier
+                : this.airSlowWorldSpeedMultiplier;
+            return;
         }
+
+        if (cursors.right.isDown && !cursors.left.isDown) {
+            // 右键表示相对世界轻微提速，只调整跑酷节奏，不扩展跳跃距离。
+            this.normalWorldSpeedMultiplier = body.blocked.down
+                ? this.groundFastWorldSpeedMultiplier
+                : this.airFastWorldSpeedMultiplier;
+            return;
+        }
+
+        // 未按左右或左右同时按下时保持基础世界速度，避免产生额外站位漂移。
+        this.normalWorldSpeedMultiplier = 1;
     }
 
     private handleJump(cursors: Types.Input.Keyboard.CursorKeys) {
@@ -153,17 +167,19 @@ export class Player extends GameObjects.Text {
     }
 
     private handleDash(cursors: Types.Input.Keyboard.CursorKeys) {
-        const body = this.body as Physics.Arcade.Body;
-
         // 地面和空中都可以无限次冲刺。
         if (Input.Keyboard.JustDown(cursors.space)) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
         }
+    }
 
-        // 冲刺期间保持速度
-        if (this.isDashing) {
-            body.setVelocityX(this.dashSpeed * this.facingDirection);
-        }
+    private getDashWorldSpeedMultiplier() {
+        // Dash 不推动玩家本体，而是让世界在固定时间内额外滚过固定距离。
+        return (
+            1 +
+            this.dashDistance /
+                (this.baseWorldSpeed * (this.dashDuration / 1000))
+        );
     }
 
     private handleDownDash(

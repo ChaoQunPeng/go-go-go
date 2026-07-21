@@ -73,17 +73,9 @@ export class PlatformManager {
             allowRock: false,
             allowItem: false,
             minWidth: 1000,
-            maxWidth: 1000,
+            maxWidth: 2000,
         });
 
-        // 准备区后半段增加上层平台，让玩家开局即可开始换层。
-        this.addPlatform(0, {
-            allowRock: false,
-            allowItem: false,
-            startX: 600,
-            minWidth: 400,
-            maxWidth: 400,
-        });
         this.currentPlatformRow = 0;
         this.lastRowDirection = -1;
 

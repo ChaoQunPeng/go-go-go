@@ -94,8 +94,8 @@ export class Game extends Scene {
         // 先读取本帧输入，确保世界速度立即跟随玩家朝向变化。
         this.player.update(this.cursors);
 
-        // 玩家朝右时，世界移动距离变为原来的两倍。
-        const speedMultiplier = 1;
+        // Dash 时临时提高世界滚动速度，让冲刺表现为跑酷节奏加速。
+        const speedMultiplier = this.player.worldSpeedMultiplier;
         const scrollDistance =
             this.worldSpeed * speedMultiplier * (delta / 1000);
 
