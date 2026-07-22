@@ -30,12 +30,10 @@ export class Player extends GameObjects.Text {
     // 冲撞/下撞
     // 下撞速度，数值越大向下冲得越快。
     private readonly dashDownSpeed = 800;
-    // Dash 固定推进距离，业务上用于快速赶路、穿过危险区和撞碎障碍。
-    private readonly dashDistance = 150;
-    // 场景基础世界滚动速度，Dash 需要用它把固定距离换算成世界速度倍率。
-    private readonly baseWorldSpeed = 300;
+    // Dash 只小幅提高世界速度，主要依靠视觉反馈表现冲刺状态。
+    private readonly dashWorldSpeedMultiplier = 1.3;
     // 横向冲刺持续时间，单位为毫秒。
-    private readonly dashDuration = 180;
+    private readonly dashDuration = 320;
     // 当前是否正在下撞，运行时自动更新。
     private dashingDown = false;
     // 横向冲刺结束时间，运行时自动计算。
@@ -74,7 +72,7 @@ export class Player extends GameObjects.Text {
     public get worldSpeedMultiplier() {
         // Dash 是独立技能，冲刺期间不叠加普通左右键的轻微速度修正。
         return this.isDashing
-            ? this.getDashWorldSpeedMultiplier()
+            ? this.dashWorldSpeedMultiplier
             : this.normalWorldSpeedMultiplier;
     }
 
@@ -170,16 +168,79 @@ export class Player extends GameObjects.Text {
         // 地面和空中都可以无限次冲刺。
         if (Input.Keyboard.JustDown(cursors.space)) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
+            this.playDashEffects();
         }
     }
 
-    private getDashWorldSpeedMultiplier() {
-        // Dash 不推动玩家本体，而是让世界在固定时间内额外滚过固定距离。
-        return (
-            1 +
-            this.dashDistance /
-                (this.baseWorldSpeed * (this.dashDuration / 1000))
-        );
+    private playDashEffects() {
+        // 压缩拉伸只改变玩家显示，不影响物理碰撞体和固定站位。
+        this.sceneRef.tweens.killTweensOf(this);
+        this.setScale(1.32, 0.78);
+        this.sceneRef.tweens.add({
+            targets: this,
+            scaleX: 1,
+            scaleY: 1,
+            duration: this.dashDuration,
+            ease: 'Back.easeOut',
+        });
+
+        this.createDashAfterimages();
+        this.createDashSpeedLines();
+        this.sceneRef.cameras.main.shake(90, 0.002);
+    }
+
+    private createDashAfterimages() {
+        for (let index = 1; index <= 3; index++) {
+            // 残影向玩家后方消散，强化向前冲刺的方向感。
+            const afterimage = this.sceneRef.add
+                .text(this.x - index * 14, this.y, this.text, {
+                    fontSize: '48px',
+                })
+                .setOrigin(0.5)
+                .setFlipX(true)
+                .setAlpha(0.32 / index)
+                .setDepth(this.depth - 1);
+
+            this.sceneRef.tweens.add({
+                targets: afterimage,
+                x: afterimage.x - 30,
+                alpha: 0,
+                duration: 140 + index * 35,
+                ease: 'Quad.easeOut',
+                onComplete: () => {
+                    afterimage.destroy();
+                },
+            });
+        }
+    }
+
+    private createDashSpeedLines() {
+        const speedLines = this.sceneRef.add
+            .graphics()
+            .setDepth(this.depth + 1);
+
+        // 使用固定分布避免每次 Dash 的视觉强度随机变化。
+        for (let index = 0; index < 7; index++) {
+            const startX = 180 + (index % 3) * 70;
+            const y = 100 + index * 88;
+
+            speedLines.lineStyle(index % 2 === 0 ? 3 : 2, 0x0f766e, 0.4);
+            speedLines.beginPath();
+            speedLines.moveTo(startX, y);
+            speedLines.lineTo(startX + 180 + index * 14, y);
+            speedLines.strokePath();
+        }
+
+        this.sceneRef.tweens.add({
+            targets: speedLines,
+            x: -120,
+            alpha: 0,
+            duration: this.dashDuration,
+            ease: 'Quad.easeOut',
+            onComplete: () => {
+                speedLines.destroy();
+            },
+        });
     }
 
     private handleDownDash(
