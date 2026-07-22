@@ -4,15 +4,11 @@ export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
     private readonly onDashWorldAdvance: (distance: number) => void;
 
-    // 地面按左时略微放慢世界滚动，用于让玩家相对世界向后调整节奏。
-    private readonly groundSlowWorldSpeedMultiplier = 0.9;
-    // 地面按右时略微加快世界滚动，用于让玩家相对世界向前调整节奏。
-    private readonly groundFastWorldSpeedMultiplier = 1.1;
-    // 空中左右只允许更小幅度影响世界速度，避免明显改变跳跃落点和轨迹。
-    private readonly airSlowWorldSpeedMultiplier = 0.95;
-    private readonly airFastWorldSpeedMultiplier = 1.05;
-    // 普通左右输入产生的世界速度倍率，默认不改变跑酷节奏。
-    private normalWorldSpeedMultiplier = 1;
+    // 地面和空中的水平移动速度，空中较慢以保持跳跃轨迹稳定。
+    private readonly groundMoveSpeed = 400;
+    private readonly airMoveSpeed = 250;
+    // 当前朝向：1 为右，-1 为左。
+    private facingDirection = 1;
 
     // 跳跃相关
     // 起跳速度，数值越大起跳越有力、跳得越高。
@@ -85,8 +81,8 @@ export class Player extends GameObjects.Text {
     }
 
     public get worldSpeedMultiplier() {
-        // Dash 不覆盖世界速度，始终沿用当前普通输入倍率。
-        return this.normalWorldSpeedMultiplier;
+        // 自由移动只改变玩家位置，不修改世界滚动速度。
+        return 1;
     }
 
     public get isDashingDown() {
@@ -101,8 +97,7 @@ export class Player extends GameObjects.Text {
     }
 
     public get isFacingRight() {
-        // Endless Runner 中玩家始终朝向前方，左右键只调整世界相对速度。
-        return true;
+        return this.facingDirection === 1;
     }
 
     public increaseMaxJumpCount() {
@@ -128,6 +123,9 @@ export class Player extends GameObjects.Text {
 
         this.updateGroundState(isGrounded);
 
+        // 冲刺
+        this.handleDash(cursors);
+
         // 移动
         this.handleMove(cursors);
 
@@ -136,9 +134,6 @@ export class Player extends GameObjects.Text {
 
         // 下
         this.handleDownDash(cursors, isGrounded);
-
-        // 冲刺
-        this.handleDash(cursors);
 
         // Body 重力会与全局重力叠加：上升不追加，下降时增强重力。
         body.setGravityY(
@@ -149,24 +144,27 @@ export class Player extends GameObjects.Text {
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
         const body = this.body as Physics.Arcade.Body;
 
+        if (this.dashMovementTween?.isPlaying()) {
+            // Dash 和镜头追赶期间由 Tween 接管横向坐标。
+            return;
+        }
+
+        const moveSpeed = body.blocked.down
+            ? this.groundMoveSpeed
+            : this.airMoveSpeed;
+
         if (cursors.left.isDown && !cursors.right.isDown) {
-            // 左键表示相对世界轻微减速，不给玩家本体水平速度，也不改变朝向。
-            this.normalWorldSpeedMultiplier = body.blocked.down
-                ? this.groundSlowWorldSpeedMultiplier
-                : this.airSlowWorldSpeedMultiplier;
+            this.facingDirection = -1;
+            this.setFlipX(false);
+            body.setVelocityX(-moveSpeed);
             return;
         }
 
         if (cursors.right.isDown && !cursors.left.isDown) {
-            // 右键表示相对世界轻微提速，只调整跑酷节奏，不扩展跳跃距离。
-            this.normalWorldSpeedMultiplier = body.blocked.down
-                ? this.groundFastWorldSpeedMultiplier
-                : this.airFastWorldSpeedMultiplier;
-            return;
+            this.facingDirection = 1;
+            this.setFlipX(true);
+            body.setVelocityX(moveSpeed);
         }
-
-        // 未按左右或左右同时按下时保持基础世界速度，避免产生额外站位漂移。
-        this.normalWorldSpeedMultiplier = 1;
     }
 
     private handleJump(cursors: Types.Input.Keyboard.CursorKeys) {

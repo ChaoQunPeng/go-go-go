@@ -22,7 +22,7 @@ export class Game extends Scene {
     private scoreManager: ScoreManager;
     private gameState: GameState = 'waiting';
 
-    private readonly worldSpeed = 0;
+    private readonly worldSpeed = 300;
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
