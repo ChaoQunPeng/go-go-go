@@ -7,6 +7,10 @@ export class Player extends GameObjects.Text {
     // 地面和空中的水平移动速度，空中较慢以保持跳跃轨迹稳定。
     private readonly groundMoveSpeed = 400;
     private readonly airMoveSpeed = 250;
+    // 按住方向键时逐渐提速，松开后通过 Drag 平滑减速。
+    private readonly groundMoveAcceleration = 1600;
+    private readonly airMoveAcceleration = 1000;
+    private readonly moveDeceleration = 2000;
     // 当前朝向：1 为右，-1 为左。
     private facingDirection = 1;
 
@@ -119,8 +123,6 @@ export class Player extends GameObjects.Text {
             return;
         }
 
-        body.setVelocityX(0);
-
         this.updateGroundState(isGrounded);
 
         // 冲刺
@@ -145,26 +147,45 @@ export class Player extends GameObjects.Text {
         const body = this.body as Physics.Arcade.Body;
 
         if (this.dashMovementTween?.isPlaying()) {
-            // Dash 和镜头追赶期间由 Tween 接管横向坐标。
+            // Dash 和镜头追赶期间清除惯性，由 Tween 接管横向坐标。
+            this.stopHorizontalMovement(body);
             return;
         }
 
         const moveSpeed = body.blocked.down
             ? this.groundMoveSpeed
             : this.airMoveSpeed;
+        const moveAcceleration = body.blocked.down
+            ? this.groundMoveAcceleration
+            : this.airMoveAcceleration;
+
+        body.setMaxVelocity(moveSpeed, body.maxVelocity.y);
 
         if (cursors.left.isDown && !cursors.right.isDown) {
             this.facingDirection = -1;
             this.setFlipX(false);
-            body.setVelocityX(-moveSpeed);
+            body.setDragX(0);
+            body.setAccelerationX(-moveAcceleration);
             return;
         }
 
         if (cursors.right.isDown && !cursors.left.isDown) {
             this.facingDirection = 1;
             this.setFlipX(true);
-            body.setVelocityX(moveSpeed);
+            body.setDragX(0);
+            body.setAccelerationX(moveAcceleration);
+            return;
         }
+
+        // 松开按键或同时按下左右时，从当前速度平滑减速到 0。
+        body.setAccelerationX(0);
+        body.setDragX(this.moveDeceleration);
+    }
+
+    private stopHorizontalMovement(body: Physics.Arcade.Body) {
+        body.setVelocityX(0);
+        body.setAccelerationX(0);
+        body.setDragX(0);
     }
 
     private handleJump(cursors: Types.Input.Keyboard.CursorKeys) {
