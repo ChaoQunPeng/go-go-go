@@ -22,7 +22,7 @@ export class Game extends Scene {
     private scoreManager: ScoreManager;
     private gameState: GameState = 'waiting';
 
-    private readonly worldSpeed = 300;
+    private readonly worldSpeed = 0;
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -56,7 +56,9 @@ export class Game extends Scene {
         // 保留左、右和顶部边界，允许玩家从世界底部掉落。
         this.physics.world.setBoundsCollision(true, true, true, false);
 
-        this.player = new Player(this, 100, 300);
+        this.player = new Player(this, 100, 300, (distance) => {
+            this.advanceWorld(distance);
+        });
         this.scoreManager = new ScoreManager(this);
         this.itemManager = new ItemManager(this, this.player);
         this.rockManager = new RockManager({
@@ -94,16 +96,12 @@ export class Game extends Scene {
         // 先读取本帧输入，确保世界速度立即跟随玩家朝向变化。
         this.player.update(this.cursors);
 
-        // Dash 时临时提高世界滚动速度，让冲刺表现为跑酷节奏加速。
+        // 玩家状态只提供倍率，不直接改写 worldSpeed，结束后自然恢复当前速度。
         const speedMultiplier = this.player.worldSpeedMultiplier;
         const scrollDistance =
             this.worldSpeed * speedMultiplier * (delta / 1000);
 
-        // 先更新已有石头和道具，避免新对象在出生帧立即移动。
-        this.rockManager.update(scrollDistance);
-        this.itemManager.update(scrollDistance);
-        this.platformManager.update(scrollDistance);
-        this.scoreManager.update(scrollDistance);
+        this.advanceWorld(scrollDistance);
 
         const playerBounds = this.player.getBounds();
 
@@ -111,6 +109,14 @@ export class Game extends Scene {
         if (playerBounds.top > this.physics.world.bounds.bottom) {
             this.gameOver();
         }
+    }
+
+    private advanceWorld(scrollDistance: number) {
+        // 先更新已有石头和道具，避免新对象在出生帧立即移动。
+        this.rockManager.update(scrollDistance);
+        this.itemManager.update(scrollDistance);
+        this.platformManager.update(scrollDistance);
+        this.scoreManager.update(scrollDistance);
     }
 
     private showStartScreen() {
@@ -131,6 +137,8 @@ export class Game extends Scene {
         }
 
         this.gameState = 'game-over';
+        // 生命周期状态优先于玩家动作，结算前立即结束 Dash 及其特效。
+        this.player.cancelDash();
         this.physics.pause();
         // 调试图层层级最高，需要单独隐藏才能展示完整结算画面。
         this.physics.world.debugGraphic?.setVisible(false);

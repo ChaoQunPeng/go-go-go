@@ -1,7 +1,8 @@
-import { GameObjects, Input, Physics, Scene, Types } from 'phaser';
+import { GameObjects, Input, Physics, Scene, Tweens, Types } from 'phaser';
 
 export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
+    private readonly onDashWorldAdvance: (distance: number) => void;
 
     // 地面按左时略微放慢世界滚动，用于让玩家相对世界向后调整节奏。
     private readonly groundSlowWorldSpeedMultiplier = 0.9;
@@ -30,22 +31,36 @@ export class Player extends GameObjects.Text {
     // 冲撞/下撞
     // 下撞速度，数值越大向下冲得越快。
     private readonly dashDownSpeed = 800;
-    // Dash 只小幅提高世界速度，主要依靠视觉反馈表现冲刺状态。
-    private readonly dashWorldSpeedMultiplier = 1.3;
+    // Player 与 Camera 分阶段前进的距离，结束后结算到世界并恢复坐标基准。
+    private readonly dashDistance = 100;
     // 横向冲刺持续时间，单位为毫秒。
-    private readonly dashDuration = 320;
+    private readonly dashDuration = 160;
+    // Dash 结束后镜头追赶玩家的时间，单位为毫秒。
+    private readonly cameraCatchUpDuration = 180;
     // 当前是否正在下撞，运行时自动更新。
     private dashingDown = false;
     // 横向冲刺结束时间，运行时自动计算。
     private dashEndTime = 0;
+    // 记录 Dash 临时特效，便于死亡或暂停时统一清理。
+    private dashEffectObjects: GameObjects.GameObject[] = [];
+    // 依次保存玩家冲刺和镜头追赶 Tween，避免两个阶段重叠。
+    private dashMovementTween?: Tweens.Tween;
+    private dashStartX?: number;
+    private dashStartCameraScrollX?: number;
 
-    constructor(scene: Scene, x: number, y: number) {
+    constructor(
+        scene: Scene,
+        x: number,
+        y: number,
+        onDashWorldAdvance: (distance: number) => void,
+    ) {
         // 使用 emoji 展示人物，避免依赖外部图片纹理。
         super(scene, x, y, '🏃', {
             fontSize: '48px',
         });
         this.setFlipX(true);
         this.sceneRef = scene;
+        this.onDashWorldAdvance = onDashWorldAdvance;
         this.setOrigin(0.5);
         scene.add.existing(this);
         scene.physics.add.existing(this);
@@ -70,14 +85,19 @@ export class Player extends GameObjects.Text {
     }
 
     public get worldSpeedMultiplier() {
-        // Dash 是独立技能，冲刺期间不叠加普通左右键的轻微速度修正。
-        return this.isDashing
-            ? this.dashWorldSpeedMultiplier
-            : this.normalWorldSpeedMultiplier;
+        // Dash 不覆盖世界速度，始终沿用当前普通输入倍率。
+        return this.normalWorldSpeedMultiplier;
     }
 
     public get isDashingDown() {
         return this.dashingDown;
+    }
+
+    public cancelDash() {
+        // 非游玩状态优先于 Dash，立即结束计时并清理视觉状态。
+        this.dashEndTime = 0;
+        this.dashingDown = false;
+        this.clearDashEffects();
     }
 
     public get isFacingRight() {
@@ -129,12 +149,6 @@ export class Player extends GameObjects.Text {
     private handleMove(cursors: Types.Input.Keyboard.CursorKeys) {
         const body = this.body as Physics.Arcade.Body;
 
-        if (this.isDashing) {
-            // Dash 是独立技能，冲刺期间由 Dash 接管横向位移和世界速度倍率。
-            this.normalWorldSpeedMultiplier = 1;
-            return;
-        }
-
         if (cursors.left.isDown && !cursors.right.isDown) {
             // 左键表示相对世界轻微减速，不给玩家本体水平速度，也不改变朝向。
             this.normalWorldSpeedMultiplier = body.blocked.down
@@ -165,17 +179,22 @@ export class Player extends GameObjects.Text {
     }
 
     private handleDash(cursors: Types.Input.Keyboard.CursorKeys) {
-        // 地面和空中都可以无限次冲刺。
-        if (Input.Keyboard.JustDown(cursors.space)) {
+        // 镜头追赶完成前不重复触发，避免坐标归一化相互覆盖。
+        if (
+            Input.Keyboard.JustDown(cursors.space) &&
+            !this.dashMovementTween?.isPlaying()
+        ) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
             this.playDashEffects();
         }
     }
 
     private playDashEffects() {
-        // 压缩拉伸只改变玩家显示，不影响物理碰撞体和固定站位。
-        this.sceneRef.tweens.killTweensOf(this);
+        this.clearDashEffects();
         this.setScale(1.32, 0.78);
+        this.startDashMovement();
+
+        // 位移和压缩拉伸使用相同时间，统一结束 Dash 动画。
         this.sceneRef.tweens.add({
             targets: this,
             scaleX: 1,
@@ -190,16 +209,22 @@ export class Player extends GameObjects.Text {
     }
 
     private createDashAfterimages() {
+        const camera = this.sceneRef.cameras.main;
+        const playerScreenX = this.x - camera.scrollX;
+        const playerScreenY = this.y - camera.scrollY;
+
         for (let index = 1; index <= 3; index++) {
-            // 残影向玩家后方消散，强化向前冲刺的方向感。
+            // 残影使用屏幕坐标，避免镜头移动时改变拖尾位置。
             const afterimage = this.sceneRef.add
-                .text(this.x - index * 14, this.y, this.text, {
+                .text(playerScreenX - index * 14, playerScreenY, this.text, {
                     fontSize: '48px',
                 })
                 .setOrigin(0.5)
                 .setFlipX(true)
                 .setAlpha(0.32 / index)
+                .setScrollFactor(0)
                 .setDepth(this.depth - 1);
+            this.dashEffectObjects.push(afterimage);
 
             this.sceneRef.tweens.add({
                 targets: afterimage,
@@ -208,7 +233,7 @@ export class Player extends GameObjects.Text {
                 duration: 140 + index * 35,
                 ease: 'Quad.easeOut',
                 onComplete: () => {
-                    afterimage.destroy();
+                    this.destroyDashEffect(afterimage);
                 },
             });
         }
@@ -217,7 +242,9 @@ export class Player extends GameObjects.Text {
     private createDashSpeedLines() {
         const speedLines = this.sceneRef.add
             .graphics()
+            .setScrollFactor(0)
             .setDepth(this.depth + 1);
+        this.dashEffectObjects.push(speedLines);
 
         // 使用固定分布避免每次 Dash 的视觉强度随机变化。
         for (let index = 0; index < 7; index++) {
@@ -238,9 +265,103 @@ export class Player extends GameObjects.Text {
             duration: this.dashDuration,
             ease: 'Quad.easeOut',
             onComplete: () => {
-                speedLines.destroy();
+                this.destroyDashEffect(speedLines);
             },
         });
+    }
+
+    private startDashMovement() {
+        const camera = this.sceneRef.cameras.main;
+
+        this.dashStartX = this.x;
+        this.dashStartCameraScrollX = camera.scrollX;
+
+        // Dash 阶段只移动玩家，让玩家先在画面中明显向前冲出。
+        this.dashMovementTween = this.sceneRef.tweens.add({
+            targets: this,
+            x: this.dashStartX + this.dashDistance,
+            duration: this.dashDuration,
+            ease: 'Cubic.easeOut',
+            onComplete: () => {
+                this.startCameraCatchUp();
+            },
+        });
+    }
+
+    private startCameraCatchUp() {
+        if (this.dashStartCameraScrollX === undefined) {
+            return;
+        }
+
+        const camera = this.sceneRef.cameras.main;
+
+        // Dash 结束后镜头再追上玩家，使玩家平滑回到屏幕左侧。
+        this.dashMovementTween = this.sceneRef.tweens.add({
+            targets: camera,
+            scrollX: this.dashStartCameraScrollX + this.dashDistance,
+            duration: this.cameraCatchUpDuration,
+            ease: 'Sine.easeInOut',
+            onComplete: () => {
+                this.completeDashMovement();
+            },
+        });
+    }
+
+    private completeDashMovement() {
+        if (
+            this.dashStartX === undefined ||
+            this.dashStartCameraScrollX === undefined
+        ) {
+            return;
+        }
+
+        const distance = this.x - this.dashStartX;
+
+        // 将镜头位移结算为世界滚动，再恢复固定坐标，画面不会发生跳变。
+        this.onDashWorldAdvance(distance);
+        this.restoreDashCoordinates();
+        this.dashMovementTween = undefined;
+    }
+
+    private clearDashEffects() {
+        this.dashMovementTween?.stop();
+        this.dashMovementTween = undefined;
+        this.restoreDashCoordinates();
+        this.sceneRef.tweens.killTweensOf(this);
+        this.sceneRef.cameras.main.shakeEffect.reset();
+        this.setScale(1);
+
+        for (const effect of this.dashEffectObjects) {
+            this.sceneRef.tweens.killTweensOf(effect);
+            effect.destroy();
+        }
+
+        this.dashEffectObjects = [];
+    }
+
+    private destroyDashEffect(effect: GameObjects.GameObject) {
+        const index = this.dashEffectObjects.indexOf(effect);
+
+        if (index !== -1) {
+            this.dashEffectObjects.splice(index, 1);
+        }
+
+        effect.destroy();
+    }
+
+    private restoreDashCoordinates() {
+        if (
+            this.dashStartX === undefined ||
+            this.dashStartCameraScrollX === undefined
+        ) {
+            return;
+        }
+
+        this.setX(this.dashStartX);
+        this.sceneRef.cameras.main.scrollX = this.dashStartCameraScrollX;
+        (this.body as Physics.Arcade.Body).updateFromGameObject();
+        this.dashStartX = undefined;
+        this.dashStartCameraScrollX = undefined;
     }
 
     private handleDownDash(
