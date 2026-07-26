@@ -1,5 +1,5 @@
 // 从 Phaser 里导入需要用到的类型和基类。
-import { Types, Scene } from 'phaser';
+import { GameObjects, Types, Scene } from 'phaser';
 import { Player } from '../player/player.ts';
 import { PlatformManager } from '../platform/PlatformManager.ts';
 import { RockManager } from '../rock/RockManager.ts';
@@ -20,9 +20,12 @@ export class Game extends Scene {
     private rockManager!: RockManager;
     private itemManager!: ItemManager;
     private scoreManager: ScoreManager;
+    private speedText!: GameObjects.Text;
     private gameState: GameState = 'waiting';
 
     private readonly worldSpeed = 300;
+    // 游戏世界中 100 像素对应 1 米，用于换算速度显示。
+    private readonly pixelsPerMeter = 100;
 
     // 构造函数会在创建这个场景时执行一次。
     constructor() {
@@ -86,6 +89,14 @@ export class Game extends Scene {
         this.rockManager.create();
         this.itemManager.create();
         this.scoreManager.create();
+        // 速度固定显示在左上角，不跟随游戏世界滚动。
+        this.speedText = this.add
+            .text(50, 100, '速度: 3.0 m/s', {
+                fontSize: '28px',
+                color: '#000000',
+            })
+            .setScrollFactor(0)
+            .setDepth(1000);
     }
 
     update(_: number, delta: number) {
@@ -98,8 +109,11 @@ export class Game extends Scene {
 
         // 玩家状态只提供倍率，不直接改写 worldSpeed，结束后自然恢复当前速度。
         const speedMultiplier = this.player.worldSpeedMultiplier;
-        const scrollDistance =
-            this.worldSpeed * speedMultiplier * (delta / 1000);
+        const currentSpeed = this.worldSpeed * speedMultiplier;
+        const speedMetersPerSecond = currentSpeed / this.pixelsPerMeter;
+        this.speedText.setText(`速度: ${speedMetersPerSecond.toFixed(1)} m/s`);
+
+        const scrollDistance = currentSpeed * (delta / 1000);
 
         this.advanceWorld(scrollDistance);
 

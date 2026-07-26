@@ -4,15 +4,10 @@ export class Player extends GameObjects.Text {
     private readonly sceneRef: Scene;
     private readonly onDashWorldAdvance: (distance: number) => void;
 
-    // 地面和空中的水平移动速度，空中较慢以保持跳跃轨迹稳定。
-    private readonly groundMoveSpeed = 400;
-    private readonly airMoveSpeed = 250;
-    // 按住方向键时逐渐提速，松开后通过 Drag 平滑减速。
-    private readonly groundMoveAcceleration = 1600;
-    private readonly airMoveAcceleration = 1000;
-    private readonly moveDeceleration = 2000;
     // 当前朝向：1 为右，-1 为左。
     private facingDirection = 1;
+    // 按住方向键时使用的世界滚动速度倍率。
+    private currentWorldSpeedMultiplier = 1;
 
     // 跳跃相关
     // 起跳速度，数值越大起跳越有力、跳得越高。
@@ -85,8 +80,7 @@ export class Player extends GameObjects.Text {
     }
 
     public get worldSpeedMultiplier() {
-        // 自由移动只改变玩家位置，不修改世界滚动速度。
-        return 1;
+        return this.currentWorldSpeedMultiplier;
     }
 
     public get isDashingDown() {
@@ -148,38 +142,25 @@ export class Player extends GameObjects.Text {
 
         if (this.dashMovementTween?.isPlaying()) {
             // Dash 和镜头追赶期间清除惯性，由 Tween 接管横向坐标。
+            this.currentWorldSpeedMultiplier = 1;
             this.stopHorizontalMovement(body);
             return;
         }
 
-        const moveSpeed = body.blocked.down
-            ? this.groundMoveSpeed
-            : this.airMoveSpeed;
-        const moveAcceleration = body.blocked.down
-            ? this.groundMoveAcceleration
-            : this.airMoveAcceleration;
-
-        body.setMaxVelocity(moveSpeed, body.maxVelocity.y);
-
         if (cursors.left.isDown && !cursors.right.isDown) {
             this.facingDirection = -1;
             this.setFlipX(false);
-            body.setDragX(0);
-            body.setAccelerationX(-moveAcceleration);
-            return;
-        }
-
-        if (cursors.right.isDown && !cursors.left.isDown) {
+            this.currentWorldSpeedMultiplier = 0.8;
+        } else if (cursors.right.isDown && !cursors.left.isDown) {
             this.facingDirection = 1;
             this.setFlipX(true);
-            body.setDragX(0);
-            body.setAccelerationX(moveAcceleration);
-            return;
+            this.currentWorldSpeedMultiplier = 1.5;
+        } else {
+            this.currentWorldSpeedMultiplier = 1;
         }
 
-        // 松开按键或同时按下左右时，从当前速度平滑减速到 0。
-        body.setAccelerationX(0);
-        body.setDragX(this.moveDeceleration);
+        // 左右键只调整世界速度，不改变玩家的水平位置。
+        this.stopHorizontalMovement(body);
     }
 
     private stopHorizontalMovement(body: Physics.Arcade.Body) {
@@ -204,7 +185,7 @@ export class Player extends GameObjects.Text {
             !this.dashMovementTween?.isPlaying()
         ) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
-            this.playDashEffects();
+            // this.playDashEffects();
         }
     }
 
