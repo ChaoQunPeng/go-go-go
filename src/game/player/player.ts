@@ -28,8 +28,10 @@ export class Player extends GameObjects.Text {
     private readonly dashDownSpeed = 800;
     // Player 与 Camera 分阶段前进的距离，结束后结算到世界并恢复坐标基准。
     private readonly dashDistance = 100;
-    // 横向冲刺持续时间，单位为毫秒。
-    private readonly dashDuration = 160;
+    // 冲刺攻击状态持续 0.5 秒，期间碰撞石头会将其击碎。
+    private readonly dashDuration = 500;
+    // 冲刺期间叠加到当前方向速度上的世界速度倍率。
+    private readonly dashWorldSpeedMultiplier = 1.5;
     // Dash 结束后镜头追赶玩家的时间，单位为毫秒。
     private readonly cameraCatchUpDuration = 180;
     // 当前是否正在下撞，运行时自动更新。
@@ -80,7 +82,11 @@ export class Player extends GameObjects.Text {
     }
 
     public get worldSpeedMultiplier() {
-        return this.currentWorldSpeedMultiplier;
+        // 冲刺倍率与方向倍率叠加，例如向右冲刺时总倍率为 1.5 * 1.5。
+        return (
+            this.currentWorldSpeedMultiplier *
+            (this.isDashing ? this.dashWorldSpeedMultiplier : 1)
+        );
     }
 
     public get isDashingDown() {
@@ -119,11 +125,11 @@ export class Player extends GameObjects.Text {
 
         this.updateGroundState(isGrounded);
 
+        // 先更新移动方向，确保本帧切换朝向后冲刺判断立即生效。
+        this.handleMove(cursors);
+
         // 冲刺
         this.handleDash(cursors);
-
-        // 移动
-        this.handleMove(cursors);
 
         // 跳
         this.handleJump(cursors);
@@ -179,14 +185,36 @@ export class Player extends GameObjects.Text {
     }
 
     private handleDash(cursors: Types.Input.Keyboard.CursorKeys) {
-        // 镜头追赶完成前不重复触发，避免坐标归一化相互覆盖。
+        // 玩家朝右即可冲刺，无需持续按住右键；JustDown 保证长按只触发一次。
         if (
             Input.Keyboard.JustDown(cursors.space) &&
+            this.isFacingRight &&
+            !this.isDashing &&
             !this.dashMovementTween?.isPlaying()
         ) {
             this.dashEndTime = this.sceneRef.time.now + this.dashDuration;
-            // this.playDashEffects();
+            this.playDashStateEffect();
         }
+    }
+
+    /**
+     * 播放轻量冲刺状态效果，仅改变玩家外观，不影响坐标和碰撞体。
+     */
+    private playDashStateEffect() {
+        this.setScale(1.3, 0.75);
+        this.setTint(0x22d3ee);
+
+        // 形变与攻击状态同时结束，Tint 在结束时统一恢复。
+        this.sceneRef.tweens.add({
+            targets: this,
+            scaleX: 1,
+            scaleY: 1,
+            duration: this.dashDuration,
+            ease: 'Back.easeOut',
+            onComplete: () => {
+                this.clearTint();
+            },
+        });
     }
 
     private playDashEffects() {
@@ -330,6 +358,7 @@ export class Player extends GameObjects.Text {
         this.sceneRef.tweens.killTweensOf(this);
         this.sceneRef.cameras.main.shakeEffect.reset();
         this.setScale(1);
+        this.clearTint();
 
         for (const effect of this.dashEffectObjects) {
             this.sceneRef.tweens.killTweensOf(effect);

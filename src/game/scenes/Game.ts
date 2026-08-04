@@ -91,7 +91,7 @@ export class Game extends Scene {
         this.scoreManager.create();
         // 速度固定显示在左上角，不跟随游戏世界滚动。
         this.speedText = this.add
-            .text(50, 100, '速度: 3.0 m/s', {
+            .text(50, 100, this.formatSpeedText(this.worldSpeed), {
                 fontSize: '28px',
                 color: '#000000',
             })
@@ -110,8 +110,7 @@ export class Game extends Scene {
         // 玩家状态只提供倍率，不直接改写 worldSpeed，结束后自然恢复当前速度。
         const speedMultiplier = this.player.worldSpeedMultiplier;
         const currentSpeed = this.worldSpeed * speedMultiplier;
-        const speedMetersPerSecond = currentSpeed / this.pixelsPerMeter;
-        this.speedText.setText(`速度: ${speedMetersPerSecond.toFixed(1)} m/s`);
+        this.speedText.setText(this.formatSpeedText(currentSpeed));
 
         const scrollDistance = currentSpeed * (delta / 1000);
 
@@ -131,6 +130,15 @@ export class Game extends Scene {
         this.itemManager.update(scrollDistance);
         this.platformManager.update(scrollDistance);
         this.scoreManager.update(scrollDistance);
+    }
+
+    /**
+     * 将世界像素速度转换为玩家看到的米每秒文案。
+     */
+    private formatSpeedText(speed: number) {
+        const speedMetersPerSecond = speed / this.pixelsPerMeter;
+
+        return `速度: ${speedMetersPerSecond.toFixed(1)} m/s`;
     }
 
     private showStartScreen() {
